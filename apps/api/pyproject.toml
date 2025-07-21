@@ -19,6 +19,9 @@ pyjwt = "^2.10.1"
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
 pytest-asyncio = "^1.1.0"
+pytest-mock = "^3.14.0"
+httpx = "^0.28.1"
+factory-boy = "^3.3.1"
 black = "^25.1.0"
 isort = "^6.0.1"
 flake8 = "^7.3.0"
@@ -42,6 +45,7 @@ extend-ignore = ["E203", "W503"]  # Black-compatible slicing and line breaks
 
 [tool.mypy]
 python_version = "3.12"
+files = ["src/"]
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

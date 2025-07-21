@@ -4,9 +4,9 @@ from typing import Any
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 from jwt import PyJWKClient
-from prisma.models import profiles
 
 from prisma import Prisma
+from prisma.models import Profile
 from src.core.database import get_db
 from src.core.settings import settings
 from src.shared.exceptions import UnlinkedProfileError
@@ -18,8 +18,26 @@ _jwks_client = PyJWKClient(JWKS_URL) if JWKS_URL else None
 
 def decode_supabase_jwt(token: str) -> dict[str, Any]:
     """
-    Verifies the Supabase JWT using its JWKS and returns the payload.
+    Verifies JWT token. Uses JWT_SECRET for development mode if available,
+    otherwise falls back to Supabase JWKS for production.
     """
+    # Development mode: prefer JWT_SECRET if available
+    if settings.jwt_secret:
+        try:
+            payload = jwt.decode(
+                token,
+                settings.jwt_secret,
+                algorithms=["HS256"],
+                options={"verify_aud": False},
+            )
+            return dict(payload)
+        except jwt.PyJWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+            )
+
+    # Production mode: use Supabase JWKS
     if not _jwks_client:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -60,17 +78,17 @@ def get_auth_id(authorization: str = Header(None)) -> str:
 
 async def get_current_profile(
     auth_id: str = Depends(get_auth_id), db: Prisma = Depends(get_db)
-) -> profiles:
+) -> Profile:
     """
     Finds the linked profile for the authenticated user.
     """
     # Use direct dictionary for complex Prisma types to avoid TypedDict conflicts
-    where_dict = {"auth_id": auth_id}
-    include_dict = {"profiles": True}
-    link = await db.auth_links.find_unique(
+    where_dict = {"authId": auth_id}
+    include_dict = {"profile": True}
+    link = await db.authlink.find_first(
         where=where_dict,  # type: ignore[arg-type]
         include=include_dict,  # type: ignore[arg-type]
     )
-    if not link or not link.profiles:
+    if not link or not link.profile:
         raise UnlinkedProfileError()
-    return link.profiles
+    return link.profile

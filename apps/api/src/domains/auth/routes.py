@@ -1,8 +1,8 @@
 # apps/api/src/domains/auth/routes.py
 from fastapi import APIRouter, Depends
-from prisma.models import profiles
 
 from prisma import Prisma
+from prisma.models import Profile
 from src.core.database import get_db
 from src.domains.auth.dependencies import get_current_profile
 from src.domains.auth.models import PublicProfile, SessionPacket
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/session", tags=["Sessions"])
     operation_id="getSession",  # Explicit, clean function name for Orval
 )
 async def get_session(
-    db: Prisma = Depends(get_db), profile: profiles = Depends(get_current_profile)
+    db: Prisma = Depends(get_db), profile: Profile = Depends(get_current_profile)
 ) -> SessionPacket:
 
     return SessionPacket(
