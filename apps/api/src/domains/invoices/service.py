@@ -3,9 +3,10 @@ import math
 from datetime import date, datetime
 from typing import Optional
 
-from prisma import Prisma
 from prisma.enums import InvoiceStatus
 from prisma.types import InvoiceWhereInput
+
+from prisma import Prisma
 from src.domains.invoices.models import (
     InvoiceListResponse,
     InvoiceResponse,
@@ -58,12 +59,18 @@ async def get_invoices_by_organization(
     if date_from:
         if "invoiceDate" not in where_input:
             where_input["invoiceDate"] = {}
-        where_input["invoiceDate"]["gte"] = date_from  # type: ignore[index]
+        # Convert date to datetime for Prisma compatibility
+        where_input["invoiceDate"]["gte"] = datetime.combine(  # type: ignore[index]
+            date_from, datetime.min.time()
+        )
 
     if date_to:
         if "invoiceDate" not in where_input:
             where_input["invoiceDate"] = {}
-        where_input["invoiceDate"]["lte"] = date_to  # type: ignore[index]
+        # Convert date to datetime for Prisma compatibility
+        where_input["invoiceDate"]["lte"] = datetime.combine(  # type: ignore[index]
+            date_to, datetime.max.time()
+        )
 
     if modified_since:
         if "updatedAt" not in where_input:

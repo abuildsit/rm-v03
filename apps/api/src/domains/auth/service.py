@@ -1,38 +1,90 @@
 from fastapi import HTTPException, status
-from gotrue.types import AuthResponse, User
-from supabase import Client, create_client
+from prisma.enums import MemberStatus
+from prisma.models import OrganizationMember, Profile
+from prisma.types import OrganizationMemberWhereInput
 
 from prisma import Prisma
-from prisma.enums import MemberStatus
-from prisma.models import OrganizationMember
-from prisma.types import OrganizationMemberWhereInput
-from src.core.settings import settings
-
-supabase: Client | None = (
-    create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-    if settings.SUPABASE_URL and settings.SUPABASE_KEY
-    else None
-)
+from src.domains.auth.models import OrganizationMembership, SessionState
 
 
-def sign_up(email: str, password: str) -> AuthResponse:
-    if not supabase:
-        raise Exception("Supabase not configured")
-    return supabase.auth.sign_up({"email": email, "password": password})
+class SessionService:
+    """Service for session-related operations"""
 
+    def __init__(self, db: Prisma):
+        self.db = db
 
-def sign_in(email: str, password: str) -> AuthResponse:
-    if not supabase:
-        raise Exception("Supabase not configured")
-    return supabase.auth.sign_in_with_password({"email": email, "password": password})
+    async def get_session_state(self, profile: Profile) -> SessionState:
+        """
+        Get complete session state for a user including all organization memberships
 
+        Args:
+            profile: User's profile object
 
-def get_user(token: str) -> User | None:
-    """Validates the JWT and returns the user."""
-    if not supabase:
-        return None
-    session = supabase.auth.get_user(token)
-    return session.user if session else None
+        Returns:
+            SessionState with user info, current org, and all org memberships
+        """
+        try:
+            # Get user's organization memberships with organization details
+            memberships = await self.db.organizationmember.find_many(
+                where={"profileId": profile.id, "status": MemberStatus.active},
+                include={"organization": True},
+            )
+
+            organizations = []
+            current_org_id = None
+            current_org_name = None
+            current_role = None
+            current_subscription_tier = None
+
+            # Process memberships
+            if memberships:
+                for membership in memberships:
+                    if membership.organization:
+                        organizations.append(
+                            OrganizationMembership(
+                                id=membership.organization.id,
+                                name=membership.organization.name,
+                                role=membership.role,
+                            )
+                        )
+
+                        # Use last_accessed_org if available, otherwise use first org
+                        if (
+                            profile.lastAccessedOrgId
+                            and profile.lastAccessedOrgId == membership.organization.id
+                        ):
+                            current_org_id = membership.organization.id
+                            current_org_name = membership.organization.name
+                            current_role = membership.role
+                            current_subscription_tier = getattr(
+                                membership.organization, "subscriptionTier", "basic"
+                            )
+                        elif current_org_id is None:
+                            current_org_id = membership.organization.id
+                            current_org_name = membership.organization.name
+                            current_role = membership.role
+                            current_subscription_tier = getattr(
+                                membership.organization, "subscriptionTier", "basic"
+                            )
+
+            # Build session state
+            return SessionState(
+                user_id=profile.id,
+                user_email=profile.email,
+                user_display_name=getattr(profile, "displayName", None),
+                organization_id=current_org_id,
+                organization_name=current_org_name,
+                role=current_role,
+                subscription_tier=current_subscription_tier,
+                active_remittance_id=None,  # TODO: Implement remittance selection
+                organizations=organizations,
+            )
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error retrieving session state: {str(e)}",
+            )
 
 
 async def validate_organization_access(

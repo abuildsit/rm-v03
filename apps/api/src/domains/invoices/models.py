@@ -3,10 +3,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel
-
 from prisma.enums import InvoiceStatus
 from prisma.models import Invoice
+from pydantic import BaseModel
 
 
 class InvoiceResponse(BaseModel):

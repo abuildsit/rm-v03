@@ -4,9 +4,9 @@ from typing import Any
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 from jwt import PyJWKClient
+from prisma.models import Profile
 
 from prisma import Prisma
-from prisma.models import Profile
 from src.core.database import get_db
 from src.core.settings import settings
 from src.shared.exceptions import UnlinkedProfileError

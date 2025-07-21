@@ -1,23 +1,22 @@
 # apps/api/src/domains/auth/models.py
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 
-from prisma.models import Profile
 
-
-class PublicProfile(BaseModel):
-    model_config = {"arbitrary_types_allowed": True}
-
+class OrganizationMembership(BaseModel):
     id: str
     name: str
-
-    @classmethod
-    def from_prisma(cls, profile: Profile) -> "PublicProfile":
-        display_name = getattr(profile, "displayName", None)
-        return cls(id=profile.id, name=display_name or profile.email)
+    role: str
 
 
-class SessionPacket(BaseModel):
-    user: PublicProfile
-    non_db_related_list: List[str]
+class SessionState(BaseModel):
+    user_id: str
+    user_email: str
+    user_display_name: Optional[str]
+    organization_id: Optional[str]
+    organization_name: Optional[str]
+    role: Optional[str]
+    subscription_tier: Optional[str]
+    active_remittance_id: Optional[str]
+    organizations: List[OrganizationMembership]

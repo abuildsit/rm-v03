@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.core.database import prisma
 from src.domains.auth.routes import router as auth_router
 from src.domains.invoices.routes import router as invoices_router
+from src.domains.organizations.routes import router as organizations_router
 
 
 @asynccontextmanager
@@ -37,6 +38,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(invoices_router, prefix="/api/v1")
+app.include_router(organizations_router, prefix="/api/v1")
 
 
 @app.get("/")

@@ -3,10 +3,10 @@ from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-
-from prisma import Prisma
 from prisma.enums import InvoiceStatus
 from prisma.models import Profile
+
+from prisma import Prisma
 from src.core.database import get_db
 from src.domains.auth.dependencies import get_current_profile
 from src.domains.auth.service import validate_organization_access
