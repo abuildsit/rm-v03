@@ -1,0 +1,61 @@
+[tool.poetry]
+name = "remitmatch-api"
+version = "0.1.0"
+description = ""
+authors = ["abuildsit <abuildsit@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+prisma = "^0.15.0"
+fastapi = "^0.116.1"
+uvicorn = "^0.35.0"
+python-multipart = "^0.0.20"
+pydantic-settings = "^2.10.1"
+supabase = "^2.17.0"
+pyjwt = "^2.10.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+pytest-asyncio = "^1.1.0"
+black = "^25.1.0"
+isort = "^6.0.1"
+flake8 = "^7.3.0"
+mypy = "^1.17.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]  # Black-compatible slicing and line breaks
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = "prisma.*"
+ignore_missing_imports = false

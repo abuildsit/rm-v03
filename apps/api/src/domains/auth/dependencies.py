@@ -1,0 +1,76 @@
+# apps/api/src/domains/auth/dependencies.py
+from typing import Any
+
+import jwt
+from fastapi import Depends, Header, HTTPException, status
+from jwt import PyJWKClient
+from prisma.models import profiles
+
+from prisma import Prisma
+from src.core.database import get_db
+from src.core.settings import settings
+from src.shared.exceptions import UnlinkedProfileError
+
+JWKS_URL = f"{settings.SUPABASE_URL}/auth/v1/jwks" if settings.SUPABASE_URL else None
+
+_jwks_client = PyJWKClient(JWKS_URL) if JWKS_URL else None
+
+
+def decode_supabase_jwt(token: str) -> dict[str, Any]:
+    """
+    Verifies the Supabase JWT using its JWKS and returns the payload.
+    """
+    if not _jwks_client:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Supabase not configured",
+        )
+    try:
+        signing_key = _jwks_client.get_signing_key_from_jwt(token).key
+        payload = jwt.decode(
+            token,
+            signing_key,
+            algorithms=["RS256"],
+            options={"verify_aud": False},
+        )
+        # jwt.decode returns dict[str, Any] but MyPy sees it as Any
+        # Cast to satisfy type checker while maintaining runtime safety
+        return dict(payload)
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
+
+
+def get_auth_id(authorization: str = Header(None)) -> str:
+    """
+    Extracts and validates the Supabase JWT from the Authorization header.
+    Returns the user's UUID (from the `sub` claim).
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token"
+        )
+
+    token = authorization.split(" ")[1]
+    payload = decode_supabase_jwt(token)
+    return payload.get("sub") or ""
+
+
+async def get_current_profile(
+    auth_id: str = Depends(get_auth_id), db: Prisma = Depends(get_db)
+) -> profiles:
+    """
+    Finds the linked profile for the authenticated user.
+    """
+    # Use direct dictionary for complex Prisma types to avoid TypedDict conflicts
+    where_dict = {"auth_id": auth_id}
+    include_dict = {"profiles": True}
+    link = await db.auth_links.find_unique(
+        where=where_dict,  # type: ignore[arg-type]
+        include=include_dict,  # type: ignore[arg-type]
+    )
+    if not link or not link.profiles:
+        raise UnlinkedProfileError()
+    return link.profiles
