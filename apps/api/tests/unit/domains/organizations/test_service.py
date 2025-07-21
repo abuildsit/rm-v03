@@ -8,14 +8,16 @@ from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from fastapi import HTTPException
 from prisma.enums import MemberStatus, OrganizationRole
 from prisma.errors import PrismaError
-from prisma.models import Profile
+from prisma.models import OrganizationMember, Profile
 
 from src.domains.organizations.models import (
     CreateOrganizationResponse,
     OrganizationCreate,
     OrganizationResponse,
+    UpdateOrganizationMemberRequest,
 )
 from src.domains.organizations.service import OrganizationService
 
@@ -827,3 +829,300 @@ class TestGetOrganizationMembers:
         # Assert
         assert len(result) == 1
         assert result[0].joined_at is None
+
+
+class TestUpdateOrganizationMember:
+    """Test organization member update functionality."""
+
+    @pytest.fixture
+    def test_org_id(self) -> str:
+        """Test organization ID."""
+        return "test-org-123"
+
+    @pytest.fixture
+    def mock_active_member(self) -> Mock:
+        """Mock active organization member."""
+        member = Mock(spec=OrganizationMember)
+        member.id = "member-123"
+        member.profileId = "profile-1"
+        member.organizationId = "test-org-123"
+        member.role = OrganizationRole.user
+        member.status = MemberStatus.active
+        member.profile = Mock()
+        member.profile.id = "profile-1"
+        member.profile.email = "user@example.com"
+        member.profile.displayName = "Test User"
+        return member
+
+    @pytest.fixture
+    def mock_owner_member(self) -> Mock:
+        """Mock owner organization member."""
+        member = Mock(spec=OrganizationMember)
+        member.id = "owner-123"
+        member.profileId = "owner-profile"
+        member.organizationId = "test-org-123"
+        member.role = OrganizationRole.owner
+        member.status = MemberStatus.active
+        member.profile = Mock()
+        member.profile.id = "owner-profile"
+        member.profile.email = "owner@example.com"
+        member.profile.displayName = "Owner User"
+        return member
+
+    @pytest.fixture
+    def update_request(self) -> UpdateOrganizationMemberRequest:
+        """Valid update request for soft deletion."""
+        return UpdateOrganizationMemberRequest(status="removed")
+
+    @pytest.fixture
+    def requester_profile(self) -> Mock:
+        """Mock requester profile."""
+        profile = Mock(spec=Profile)
+        profile.id = "admin-profile"
+        profile.email = "admin@example.com"
+        profile.displayName = "Admin User"
+        return profile
+
+    @pytest.mark.asyncio
+    async def test_update_member_success_soft_delete(
+        self,
+        mock_prisma: Mock,
+        test_org_id: str,
+        mock_active_member: Mock,
+        update_request: UpdateOrganizationMemberRequest,
+        requester_profile: Mock,
+    ):
+        """Test successful soft deletion of a member."""
+        # Arrange
+        mock_prisma.organizationmember.find_first = AsyncMock(
+            return_value=mock_active_member
+        )
+        mock_prisma.organizationmember.update = AsyncMock()
+
+        # Mock updated member with removed status
+        updated_member = Mock(spec=OrganizationMember)
+        updated_member.id = mock_active_member.id
+        updated_member.profileId = mock_active_member.profileId
+        updated_member.role = mock_active_member.role
+        updated_member.status = MemberStatus.removed
+        updated_member.profile = mock_active_member.profile
+        updated_member.invitedByProfile = None
+        updated_member.joinedAt = datetime(2024, 1, 15, 10, 30, 0)
+
+        mock_prisma.organizationmember.update = AsyncMock(return_value=updated_member)
+
+        service = OrganizationService(mock_prisma)
+
+        # Act
+        result = await service.update_organization_member(
+            test_org_id, "profile-1", update_request, requester_profile
+        )
+
+        # Assert
+        assert result.id == "profile-1"
+        assert result.status == "removed"
+
+        # Verify find was called correctly
+        mock_prisma.organizationmember.find_first.assert_called_once_with(
+            where={
+                "profileId": "profile-1",
+                "organizationId": test_org_id,
+            },
+            include={"profile": True},
+        )
+
+        # Verify update was called correctly
+        mock_prisma.organizationmember.update.assert_called_once_with(
+            where={"id": "member-123"},
+            data={"status": MemberStatus.removed},
+            include={"profile": True, "invitedByProfile": True},
+        )
+
+    @pytest.mark.asyncio
+    async def test_update_member_not_found(
+        self,
+        mock_prisma: Mock,
+        test_org_id: str,
+        update_request: UpdateOrganizationMemberRequest,
+        requester_profile: Mock,
+    ):
+        """Test error when member not found."""
+        # Arrange
+        mock_prisma.organizationmember.find_first = AsyncMock(return_value=None)
+
+        service = OrganizationService(mock_prisma)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_organization_member(
+                test_org_id, "nonexistent-profile", update_request, requester_profile
+            )
+
+        assert exc_info.value.status_code == 404
+        assert "Member not found" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_update_member_cannot_remove_self(
+        self,
+        mock_prisma: Mock,
+        test_org_id: str,
+        mock_active_member: Mock,
+        update_request: UpdateOrganizationMemberRequest,
+    ):
+        """Test error when trying to remove yourself."""
+        # Arrange - requester is same as member being removed
+        self_profile = Mock(spec=Profile)
+        self_profile.id = mock_active_member.profileId
+        self_profile.email = "user@example.com"
+
+        mock_prisma.organizationmember.find_first = AsyncMock(
+            return_value=mock_active_member
+        )
+
+        service = OrganizationService(mock_prisma)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_organization_member(
+                test_org_id, mock_active_member.profileId, update_request, self_profile
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "Cannot remove yourself" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_update_member_cannot_remove_last_owner(
+        self,
+        mock_prisma: Mock,
+        test_org_id: str,
+        mock_owner_member: Mock,
+        update_request: UpdateOrganizationMemberRequest,
+        requester_profile: Mock,
+    ):
+        """Test error when trying to remove the last owner."""
+        # Arrange
+        mock_prisma.organizationmember.find_first = AsyncMock(
+            return_value=mock_owner_member
+        )
+        mock_prisma.organizationmember.count = AsyncMock(return_value=1)  # Only 1 owner
+
+        service = OrganizationService(mock_prisma)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_organization_member(
+                test_org_id,
+                mock_owner_member.profileId,
+                update_request,
+                requester_profile,
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "Cannot remove the last owner" in exc_info.value.detail
+
+        # Verify owner count was checked
+        mock_prisma.organizationmember.count.assert_called_once_with(
+            where={
+                "organizationId": test_org_id,
+                "role": OrganizationRole.owner,
+                "status": MemberStatus.active,
+            }
+        )
+
+    @pytest.mark.asyncio
+    async def test_update_member_already_removed(
+        self,
+        mock_prisma: Mock,
+        test_org_id: str,
+        update_request: UpdateOrganizationMemberRequest,
+        requester_profile: Mock,
+    ):
+        """Test error when member is already removed."""
+        # Arrange - member already has removed status
+        removed_member = Mock(spec=OrganizationMember)
+        removed_member.profileId = "profile-1"
+        removed_member.status = MemberStatus.removed
+        removed_member.role = OrganizationRole.user
+        removed_member.profile = Mock()
+
+        mock_prisma.organizationmember.find_first = AsyncMock(
+            return_value=removed_member
+        )
+
+        service = OrganizationService(mock_prisma)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_organization_member(
+                test_org_id, "profile-1", update_request, requester_profile
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "Member is not active" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_update_member_database_error(
+        self,
+        mock_prisma: Mock,
+        test_org_id: str,
+        mock_active_member: Mock,
+        update_request: UpdateOrganizationMemberRequest,
+        requester_profile: Mock,
+    ):
+        """Test handling of database errors during update."""
+        # Arrange
+        mock_prisma.organizationmember.find_first = AsyncMock(
+            return_value=mock_active_member
+        )
+        mock_prisma.organizationmember.update = AsyncMock(
+            side_effect=PrismaError("Database error")
+        )
+
+        service = OrganizationService(mock_prisma)
+
+        # Act & Assert
+        with pytest.raises(PrismaError) as exc_info:
+            await service.update_organization_member(
+                test_org_id, "profile-1", update_request, requester_profile
+            )
+
+        assert "Database error" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_update_member_with_multiple_owners_succeeds(
+        self,
+        mock_prisma: Mock,
+        test_org_id: str,
+        mock_owner_member: Mock,
+        update_request: UpdateOrganizationMemberRequest,
+        requester_profile: Mock,
+    ):
+        """Test that removing an owner succeeds when there are multiple owners."""
+        # Arrange
+        mock_prisma.organizationmember.find_first = AsyncMock(
+            return_value=mock_owner_member
+        )
+        mock_prisma.organizationmember.count = AsyncMock(
+            return_value=2
+        )  # 2 owners exist
+
+        # Mock updated member
+        updated_member = Mock(spec=OrganizationMember)
+        updated_member.status = MemberStatus.removed
+        updated_member.profile = mock_owner_member.profile
+        updated_member.invitedByProfile = None
+        updated_member.joinedAt = datetime(2024, 1, 1, 9, 0, 0)
+        updated_member.role = mock_owner_member.role
+
+        mock_prisma.organizationmember.update = AsyncMock(return_value=updated_member)
+
+        service = OrganizationService(mock_prisma)
+
+        # Act
+        result = await service.update_organization_member(
+            test_org_id, mock_owner_member.profileId, update_request, requester_profile
+        )
+
+        # Assert
+        assert result.status == "removed"
+        mock_prisma.organizationmember.update.assert_called_once()
