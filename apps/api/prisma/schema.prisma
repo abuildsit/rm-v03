@@ -153,6 +153,8 @@ model BankAccount {
   xeroAccountId           String
   xeroName                String?
   xeroCode                String?
+  type                    String?      @default("BANK")
+  status                  String?      @default("ACTIVE")
   isDefault               Boolean?     @default(false)
   createdAt               DateTime?    @default(now()) @db.Timestamptz(6)
   updatedAt               DateTime     @updatedAt @db.Timestamptz(6)

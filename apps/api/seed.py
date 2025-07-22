@@ -399,6 +399,69 @@ async def main():
 
         print(f"✅ Created {result} invoices")
 
+        # Seed bank account data
+        bank_accounts = [
+            {
+                "id": "ba1e4a2c-9f3d-4b8e-a7c6-5d9e8f1a2b3c",
+                "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
+                "xeroAccountId": "12345678-1234-1234-1234-123456789012",
+                "xeroName": "Business Transaction Account",
+                "xeroCode": "090",
+                "type": "BANK",
+                "status": "ACTIVE",
+                "isDefault": True,
+                "currencyCode": "AUD",
+                "enablePaymentsToAccount": True,
+                "bankAccountNumber": "062-001-12345678",
+            },
+            {
+                "id": "ba2f5b3d-8e4c-4a7f-b6d5-4c8a7b2e3f1d",
+                "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
+                "xeroAccountId": "87654321-4321-4321-4321-210987654321",
+                "xeroName": "Business Savings Account",
+                "xeroCode": "091",
+                "type": "BANK",
+                "status": "ACTIVE",
+                "isDefault": False,
+                "currencyCode": "AUD",
+                "enablePaymentsToAccount": True,
+                "bankAccountNumber": "062-001-87654321",
+            },
+            {
+                "id": "ba3a6c4e-9d5b-4f8a-c7e6-3d9f8a1c4e2f",
+                "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
+                "xeroAccountId": "11111111-1111-1111-1111-111111111111",
+                "xeroName": "Credit Card Account",
+                "xeroCode": "092",
+                "type": "CREDITCARD",
+                "status": "ACTIVE",
+                "isDefault": False,
+                "currencyCode": "AUD",
+                "enablePaymentsToAccount": False,
+                "bankAccountNumber": "4111-1111-1111-1111",
+            },
+            {
+                "id": "ba4a7d5f-8c6a-4e9b-d8f7-2c8e9b1d5f3a",
+                "organizationId": "d85c4b2a-9f1e-4c7d-b8a9-f3e7d6c5b4a3",  # Second org
+                "xeroAccountId": "22222222-2222-2222-2222-222222222222",
+                "xeroName": "Second Org Main Account",
+                "xeroCode": "093",
+                "type": "BANK",
+                "status": "ACTIVE",
+                "isDefault": True,
+                "currencyCode": "AUD",
+                "enablePaymentsToAccount": True,
+                "bankAccountNumber": "062-002-22222222",
+            },
+        ]
+
+        # Create bank accounts using create_many for efficiency
+        bank_result = await prisma.bankaccount.create_many(
+            data=bank_accounts, skip_duplicates=True
+        )
+
+        print(f"✅ Created {bank_result} bank accounts")
+
         # Set up storage bucket if Supabase is configured
         if supabase:
             await setup_storage_bucket(supabase)

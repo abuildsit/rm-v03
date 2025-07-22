@@ -1,4 +1,3 @@
-# apps/api/src/domains/organizations/dependencies.py
 from typing import Awaitable, Callable
 
 from fastapi import Depends, HTTPException, status
@@ -8,7 +7,9 @@ from prisma import Prisma
 from src.core.database import get_db
 from src.domains.auth.dependencies import get_current_profile
 from src.domains.auth.service import validate_organization_access
-from src.domains.organizations.permissions import Permission, has_permission
+
+from .models import Permission
+from .services import has_permission
 
 
 def require_permission(
