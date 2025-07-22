@@ -1,7 +1,7 @@
 # apps/api/src/domains/organizations/models.py
 from typing import Literal, Optional
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 
 class OrganizationCreate(BaseModel):
@@ -34,7 +34,8 @@ class OrganizationMemberResponse(BaseModel):
 class UpdateOrganizationMemberRequest(BaseModel):
     status: Optional[Literal["removed"]] = None
 
-    @validator("status")
+    @field_validator("status")
+    @classmethod
     def validate_has_update(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             raise ValueError("At least one field must be provided for update")

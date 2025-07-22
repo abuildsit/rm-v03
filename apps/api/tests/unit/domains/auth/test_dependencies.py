@@ -30,7 +30,7 @@ class TestDecodeSupabaseJWT:
 
         # Mock settings to use JWT_SECRET
         with patch(
-            "src.domains.auth.dependencies.settings.jwt_secret", test_jwt_secret
+            "src.domains.auth.dependencies.settings.JWT_SECRET", test_jwt_secret
         ):
             result = decode_supabase_jwt(token)
 
@@ -45,7 +45,7 @@ class TestDecodeSupabaseJWT:
         invalid_token = jwt.encode({"sub": "test"}, "wrong-secret", algorithm="HS256")
 
         with patch(
-            "src.domains.auth.dependencies.settings.jwt_secret", test_jwt_secret
+            "src.domains.auth.dependencies.settings.JWT_SECRET", test_jwt_secret
         ):
             with pytest.raises(HTTPException) as exc_info:
                 decode_supabase_jwt(invalid_token)
@@ -58,7 +58,7 @@ class TestDecodeSupabaseJWT:
         malformed_token = "not.a.valid.jwt.token"
 
         with patch(
-            "src.domains.auth.dependencies.settings.jwt_secret", test_jwt_secret
+            "src.domains.auth.dependencies.settings.JWT_SECRET", test_jwt_secret
         ):
             with pytest.raises(HTTPException) as exc_info:
                 decode_supabase_jwt(malformed_token)
@@ -72,7 +72,7 @@ class TestDecodeSupabaseJWT:
 
         # Mock no JWT_SECRET and no JWKS client
         with (
-            patch("src.domains.auth.dependencies.settings.jwt_secret", None),
+            patch("src.domains.auth.dependencies.settings.JWT_SECRET", None),
             patch("src.domains.auth.dependencies._jwks_client", None),
         ):
             with pytest.raises(HTTPException) as exc_info:

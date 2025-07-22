@@ -1,14 +1,16 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    # Supabase configuration
     SUPABASE_URL: str | None = None
     SUPABASE_KEY: str | None = None
     DATABASE_URL: str | None = None
-    # Additional environment variables that may be present
-    supabase_service_role_key: str | None = None
-    supabase_anon_key: str | None = None
-    jwt_secret: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
+    JWT_SECRET: str | None = None
 
     # Xero OAuth configuration
     XERO_CLIENT_ID: str | None = None
@@ -19,9 +21,11 @@ class Settings(BaseSettings):
         "accounting.settings offline_access"
     )
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
 
 
 settings = Settings()

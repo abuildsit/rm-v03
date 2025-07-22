@@ -22,11 +22,11 @@ def decode_supabase_jwt(token: str) -> dict[str, Any]:
     otherwise falls back to Supabase JWKS for production.
     """
     # Development mode: prefer JWT_SECRET if available
-    if settings.jwt_secret:
+    if settings.JWT_SECRET:
         try:
             payload = jwt.decode(
                 token,
-                settings.jwt_secret,
+                settings.JWT_SECRET,
                 algorithms=["HS256"],
                 options={"verify_aud": False},
             )

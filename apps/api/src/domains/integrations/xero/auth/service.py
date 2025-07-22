@@ -285,7 +285,7 @@ class XeroService:
         self, org_id: str, user_id: str, expires_at: datetime
     ) -> str:
         """Generate JWT state token for OAuth flow."""
-        if not settings.jwt_secret:
+        if not settings.JWT_SECRET:
             raise IntegrationAuthenticationError("JWT secret not configured")
 
         payload = XeroStateTokenPayload(
@@ -298,17 +298,17 @@ class XeroService:
 
         return jwt.encode(
             payload.model_dump(mode="json"),
-            settings.jwt_secret,
+            settings.JWT_SECRET,
             algorithm="HS256",
         )
 
     def _validate_state_token(self, token: str) -> XeroStateTokenPayload:
         """Validate and decode JWT state token."""
-        if not settings.jwt_secret:
+        if not settings.JWT_SECRET:
             raise IntegrationAuthenticationError("JWT secret not configured")
 
         try:
-            payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
             state_payload = XeroStateTokenPayload(**payload)
 
             # Check expiry

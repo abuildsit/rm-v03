@@ -33,7 +33,9 @@ class TestXeroService:
     @pytest.fixture
     def xero_service(self, mock_prisma: Mock, mock_settings: Mock) -> XeroService:
         """Create XeroService instance with mocked dependencies."""
-        with patch("src.domains.integrations.xero.auth.service.settings", mock_settings):
+        with patch(
+            "src.domains.integrations.xero.auth.service.settings", mock_settings
+        ):
             return XeroService(mock_prisma)
 
     @pytest.mark.asyncio
