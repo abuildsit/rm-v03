@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from src.domains.integrations.xero.auth.models import XeroConnectionResponse
+from src.domains.external_accounting.xero.auth.models import XeroConnectionResponse
 
 
 class TestXeroRoutes:
@@ -28,7 +28,7 @@ class TestXeroRoutes:
 
         # Act
         with patch(
-            "src.domains.integrations.xero.auth.routes.XeroService"
+            "src.domains.external_accounting.xero.auth.routes.XeroService"
         ) as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.complete_connection = AsyncMock(
@@ -36,7 +36,7 @@ class TestXeroRoutes:
             )
 
             response = client.get(
-                "/api/v1/integrations/auth/xero/callback",
+                "/api/v1/external-accounting/auth/xero/callback",
                 params={
                     "code": "test-auth-code",
                     "state": "test-jwt-token",
@@ -58,7 +58,7 @@ class TestXeroRoutes:
         """Test OAuth callback with error parameters."""
         # Act
         response = client.get(
-            "/api/v1/integrations/auth/xero/callback",
+            "/api/v1/external-accounting/auth/xero/callback",
             params={
                 "error": "access_denied",
                 "error_description": "User denied authorization",
@@ -80,7 +80,7 @@ class TestXeroRoutes:
         """Test OAuth callback with missing required parameters."""
         # Act
         response = client.get(
-            "/api/v1/integrations/auth/xero/callback",
+            "/api/v1/external-accounting/auth/xero/callback",
             follow_redirects=False,
         )
 
@@ -97,7 +97,7 @@ class TestXeroRoutes:
         """Test OAuth callback with service error."""
         # Act
         with patch(
-            "src.domains.integrations.xero.auth.routes.XeroService"
+            "src.domains.external_accounting.xero.auth.routes.XeroService"
         ) as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.complete_connection = AsyncMock(
@@ -105,7 +105,7 @@ class TestXeroRoutes:
             )
 
             response = client.get(
-                "/api/v1/integrations/auth/xero/callback",
+                "/api/v1/external-accounting/auth/xero/callback",
                 params={
                     "code": "test-auth-code",
                     "state": "test-jwt-token",
@@ -127,13 +127,13 @@ class TestXeroRoutes:
         # For now, we verify that the permission decorators are properly used
 
         # Import the routes to verify they use require_permission
-        from src.domains.integrations.xero.auth.routes import router
+        from src.domains.external_accounting.xero.auth.routes import router
 
         # Verify routes exist and have proper decorators
         route_paths = [route.path for route in router.routes]
 
-        assert "/integrations/auth/xero/{org_id}" in route_paths  # POST, GET, PATCH
-        assert "/integrations/auth/xero/callback" in route_paths  # GET
+        assert "/external-accounting/auth/xero/{org_id}" in route_paths  # POST, GET, PATCH
+        assert "/external-accounting/auth/xero/callback" in route_paths  # GET
 
         # Note: Actual permission testing is handled by the shared permissions tests
         # Individual route tests focus on business logic, not permission checking

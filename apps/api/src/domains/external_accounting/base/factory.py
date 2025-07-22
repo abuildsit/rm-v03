@@ -25,7 +25,9 @@ class IntegrationFactory:
         provider = await self._get_organization_provider(org_id)
 
         if provider == IntegrationProvider.XERO:
-            from src.domains.integrations.xero.data_service import XeroDataService
+            from src.domains.external_accounting.xero.data_service import (
+                XeroDataService,
+            )
 
             return XeroDataService(self.db)
 

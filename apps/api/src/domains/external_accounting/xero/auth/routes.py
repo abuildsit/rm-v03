@@ -1,4 +1,4 @@
-# apps/api/src/domains/integrations/xero/routes.py
+# apps/api/src/domains/external_accounting/xero/routes.py
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -19,7 +19,7 @@ from .models import (
 from .service import XeroService
 
 # Router for Xero integration endpoints
-router = APIRouter(prefix="/integrations", tags=["Xero Integration"])
+router = APIRouter(prefix="/external-accounting", tags=["External Accounting"])
 
 
 @router.post(
@@ -242,7 +242,10 @@ async def _initial_sync(org_id: str, db: Prisma) -> None:
     """
     import logging
 
-    from src.domains.integrations.base import IntegrationFactory, SyncOrchestrator
+    from src.domains.external_accounting.base import (
+        IntegrationFactory,
+        SyncOrchestrator,
+    )
 
     logger = logging.getLogger(__name__)
 

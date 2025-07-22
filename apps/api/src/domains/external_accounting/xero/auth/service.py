@@ -1,4 +1,4 @@
-# apps/api/src/domains/integrations/xero/service.py
+# apps/api/src/domains/external_accounting/xero/service.py
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -41,7 +41,7 @@ class XeroService:
         self.client_id = settings.XERO_CLIENT_ID
         self.client_secret = settings.XERO_CLIENT_SECRET
         self.redirect_uri = (
-            f"{settings.APP_BASE_URL}/api/v1/integrations/auth/xero/callback"
+            f"{settings.APP_BASE_URL}/api/v1/external-accounting/auth/xero/callback"
         )
         self.scopes = settings.XERO_SCOPES
 
@@ -149,7 +149,9 @@ class XeroService:
             )
 
         # Store/update connection
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=token_response.expires_in)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=token_response.expires_in
+        )
 
         if existing_connection:
             await self.db.xeroconnection.update(

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from src.domains.integrations.xero.auth.models import (
+from src.domains.external_accounting.xero.auth.models import (
     XeroAuthUrlResponse,
     XeroCallbackParams,
     XeroConnectionResponse,
@@ -17,7 +17,7 @@ from src.domains.integrations.xero.auth.models import (
     XeroTenantInfo,
     XeroTokenResponse,
 )
-from src.domains.integrations.xero.auth.service import XeroService
+from src.domains.external_accounting.xero.auth.service import XeroService
 from src.shared.exceptions import (
     IntegrationAuthenticationError,
     IntegrationConnectionError,
@@ -34,7 +34,7 @@ class TestXeroService:
     def xero_service(self, mock_prisma: Mock, mock_settings: Mock) -> XeroService:
         """Create XeroService instance with mocked dependencies."""
         with patch(
-            "src.domains.integrations.xero.auth.service.settings", mock_settings
+            "src.domains.external_accounting.xero.auth.service.settings", mock_settings
         ):
             return XeroService(mock_prisma)
 
@@ -55,7 +55,7 @@ class TestXeroService:
 
         # Act
         with patch(
-            "src.domains.integrations.xero.auth.service.jwt.encode"
+            "src.domains.external_accounting.xero.auth.service.jwt.encode"
         ) as mock_jwt_encode:
             mock_jwt_encode.return_value = "test-jwt-token"
             result = await xero_service.start_connection(org_id, user_id)
@@ -422,7 +422,7 @@ class TestXeroService:
 
         # Act
         with patch(
-            "src.domains.integrations.xero.auth.service.jwt.encode"
+            "src.domains.external_accounting.xero.auth.service.jwt.encode"
         ) as mock_jwt_encode:
             mock_jwt_encode.return_value = "mock-jwt-token"
             result = xero_service._generate_state_token(org_id, user_id, expires_at)
@@ -448,7 +448,7 @@ class TestXeroService:
 
         # Act
         with patch(
-            "src.domains.integrations.xero.auth.service.jwt.decode"
+            "src.domains.external_accounting.xero.auth.service.jwt.decode"
         ) as mock_jwt_decode:
             mock_jwt_decode.return_value = mock_jwt_state_token_payload
             result = xero_service._validate_state_token(token)
@@ -477,7 +477,7 @@ class TestXeroService:
 
         # Act & Assert
         with patch(
-            "src.domains.integrations.xero.auth.service.jwt.decode"
+            "src.domains.external_accounting.xero.auth.service.jwt.decode"
         ) as mock_jwt_decode:
             mock_jwt_decode.return_value = expired_payload
 

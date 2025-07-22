@@ -12,7 +12,7 @@ from .base import IntegrationFactory, SyncOrchestrator, SyncResult
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/integrations", tags=["integrations"])
+router = APIRouter(prefix="/api/v1/external-accounting", tags=["External Accounting"])
 
 
 @router.post("/invoices/{org_id}", response_model=SyncResult)

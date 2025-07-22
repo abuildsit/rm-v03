@@ -39,7 +39,7 @@ poetry run prisma db push   # Push schema changes to database
 - **Organizations** (`/organizations`) - Multi-tenant organization support with role-based permissions
 - **Bank Accounts** (`/bankaccounts`) - Bank account management and payment configuration
 - **Invoices** (`/invoices`) - Invoice management with status workflows
-- **Integrations** (`/integrations`) - Provider-agnostic integration sync (Xero, future providers)
+- **External Accounting** (`/external_accounting`) - Provider-agnostic accounting system integrations (Xero, future providers)
 - **Remittances** - Core remittance matching (AI-powered + manual overrides)
 
 ### Database Design
@@ -132,8 +132,8 @@ async def get_resource(
   - `/organizations/{org_id}/members` - Organization member management (requires VIEW_MEMBERS permission)
   - `/bankaccounts/{org_id}` - Bank account management (requires VIEW_BANK_ACCOUNTS/MANAGE_BANK_ACCOUNTS permissions)
   - `/invoices` - Invoice management
-  - `/integrations/invoices/{org_id}` - Invoice sync (requires SYNC_INVOICES permission)
-  - `/integrations/accounts/{org_id}` - Account sync (requires MANAGE_BANK_ACCOUNTS permission)
+  - `/external-accounting/invoices/{org_id}` - Invoice sync (requires SYNC_INVOICES permission)
+  - `/external-accounting/accounts/{org_id}` - Account sync (requires MANAGE_BANK_ACCOUNTS permission)
 
 ## Development Notes
 
@@ -151,18 +151,18 @@ async def get_resource(
 - Provider rate limits are respected automatically
 - Connection pooling via Prisma for optimal database performance
 
-## Integration Architecture
+## External Accounting Integration Architecture
 
 ### Provider-Agnostic Design
-The integrations domain uses a clean abstraction layer to support multiple accounting providers:
+The external accounting domain uses a clean abstraction layer to support multiple accounting providers:
 
-- `src/domains/integrations/base/` - Provider-agnostic interfaces and logic
+- `src/domains/external_accounting/base/` - Provider-agnostic interfaces and logic
   - `BaseIntegrationDataService` - Abstract interface for all providers
   - `SyncOrchestrator` - Generic sync logic (database upserts, filtering)
   - `IntegrationFactory` - Provider resolution based on organization connections
   - `SyncResult` - Standard response model
 
-- `src/domains/integrations/xero/` - Xero-specific implementation
+- `src/domains/external_accounting/xero/` - Xero-specific implementation
   - `XeroDataService` - Implements BaseIntegrationDataService
   - `auth/` - OAuth flow management (existing)
 

@@ -10,15 +10,15 @@ from prisma.enums import XeroConnectionStatus
 from prisma.models import XeroConnection
 from pydantic import ValidationError
 
-from src.domains.integrations.xero.auth.models import (
+from src.domains.external_accounting.xero.auth.models import (
     XeroAuthUrlResponse,
     XeroCallbackParams,
     XeroConnectionResponse,
 )
-from src.domains.integrations.xero.auth.models import (
+from src.domains.external_accounting.xero.auth.models import (
     XeroConnectionStatus as XeroConnectionStatusModel,
 )
-from src.domains.integrations.xero.auth.models import (
+from src.domains.external_accounting.xero.auth.models import (
     XeroDisconnectResponse,
     XeroErrorResponse,
     XeroStateTokenPayload,
@@ -89,10 +89,14 @@ class TestXeroModels:
         # Arrange
         mock_connection = Mock(spec=XeroConnection)
         mock_connection.connectionStatus = XeroConnectionStatus.connected
-        mock_connection.expiresAt = datetime.now(timezone.utc) - timedelta(hours=1)  # Expired
+        mock_connection.expiresAt = datetime.now(timezone.utc) - timedelta(
+            hours=1
+        )  # Expired
         mock_connection.xeroTenantId = "test-tenant-id"
         mock_connection.tenantName = "Test Organization"
-        mock_connection.lastRefreshedAt = datetime.now(timezone.utc) - timedelta(hours=2)
+        mock_connection.lastRefreshedAt = datetime.now(timezone.utc) - timedelta(
+            hours=2
+        )
         mock_connection.createdAt = datetime.now(timezone.utc) - timedelta(days=1)
         mock_connection.lastError = "Token expired"
         mock_connection.refreshAttempts = 1

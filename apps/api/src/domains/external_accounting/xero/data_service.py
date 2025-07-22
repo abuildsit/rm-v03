@@ -6,7 +6,7 @@ import httpx
 from prisma.enums import XeroConnectionStatus
 
 from prisma import Prisma
-from src.domains.integrations.xero.auth.service import XeroService
+from src.domains.external_accounting.xero.auth.service import XeroService
 from src.shared.exceptions import (
     IntegrationConnectionError,
     IntegrationTokenExpiredError,
