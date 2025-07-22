@@ -10,15 +10,15 @@ from prisma.enums import XeroConnectionStatus
 from prisma.models import XeroConnection
 from pydantic import ValidationError
 
-from src.domains.integrations.xero.models import (
+from src.domains.integrations.xero.auth.models import (
     XeroAuthUrlResponse,
     XeroCallbackParams,
     XeroConnectionResponse,
 )
-from src.domains.integrations.xero.models import (
+from src.domains.integrations.xero.auth.models import (
     XeroConnectionStatus as XeroConnectionStatusModel,
 )
-from src.domains.integrations.xero.models import (
+from src.domains.integrations.xero.auth.models import (
     XeroDisconnectResponse,
     XeroErrorResponse,
     XeroStateTokenPayload,

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from src.domains.integrations.xero.models import XeroConnectionResponse
+from src.domains.integrations.xero.auth.models import XeroConnectionResponse
 
 
 class TestXeroRoutes:
@@ -28,7 +28,7 @@ class TestXeroRoutes:
 
         # Act
         with patch(
-            "src.domains.integrations.xero.routes.XeroService"
+            "src.domains.integrations.xero.auth.routes.XeroService"
         ) as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.complete_connection = AsyncMock(
@@ -97,7 +97,7 @@ class TestXeroRoutes:
         """Test OAuth callback with service error."""
         # Act
         with patch(
-            "src.domains.integrations.xero.routes.XeroService"
+            "src.domains.integrations.xero.auth.routes.XeroService"
         ) as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.complete_connection = AsyncMock(
@@ -127,7 +127,7 @@ class TestXeroRoutes:
         # For now, we verify that the permission decorators are properly used
 
         # Import the routes to verify they use require_permission
-        from src.domains.integrations.xero.routes import router
+        from src.domains.integrations.xero.auth.routes import router
 
         # Verify routes exist and have proper decorators
         route_paths = [route.path for route in router.routes]

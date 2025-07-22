@@ -1,0 +1,56 @@
+# Test User Details
+
+## User Information
+- Email: test@example.com
+- Auth ID: 15c9c289-0bd3-4b0c-aa90-4046d1a71098
+- Profile ID: (varies on each seed run)
+- Organization ID: 42f929b1-8fdb-45b1-a7cf-34fae2314561
+- Role: admin
+
+## Bearer Token
+```
+Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNWM5YzI4OS0wYmQzLTRiMGMtYWE5MC00MDQ2ZDFhNzEwOTgiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJpYXQiOjE3NTMxNDQwMjgsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJpc3MiOiJzdXBhYmFzZSJ9.mKPCUlSt9ON-Z8l-pV4tHtHMXR2qEuL_dqrpx8rIM4A
+```
+
+## Curl Examples
+
+### Get Bank Accounts
+```bash
+curl -X GET "http://localhost:8001/api/v1/bankaccounts/42f929b1-8fdb-45b1-a7cf-34fae2314561" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNWM5YzI4OS0wYmQzLTRiMGMtYWE5MC00MDQ2ZDFhNzEwOTgiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJpYXQiOjE3NTMxNDQwMjgsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJpc3MiOiJzdXBhYmFzZSJ9.mKPCUlSt9ON-Z8l-pV4tHtHMXR2qEuL_dqrpx8rIM4A" \
+  -H "Content-Type: application/json"
+```
+
+### Update Bank Accounts
+```bash
+curl -X POST "http://localhost:8001/api/v1/bankaccounts/42f929b1-8fdb-45b1-a7cf-34fae2314561" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNWM5YzI4OS0wYmQzLTRiMGMtYWE5MC00MDQ2ZDFhNzEwOTgiLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20iLCJpYXQiOjE3NTMxNDQwMjgsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJpc3MiOiJzdXBhYmFzZSJ9.mKPCUlSt9ON-Z8l-pV4tHtHMXR2qEuL_dqrpx8rIM4A" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
+    "accounts": [
+      {
+        "accountId": "ba1e4a2c-9f3d-4b8e-a7c6-5d9e8f1a2b3c",
+        "enablePaymentsToAccount": true,
+        "isDefault": true
+      },
+      {
+        "accountId": "ba2f5b3d-8e4c-4a7f-b6d5-4c8a7b2e3f1d",
+        "enablePaymentsToAccount": true,
+        "isDefault": false
+      }
+    ]
+  }'
+```
+
+## Test Bank Accounts Created
+1. **ba1e4a2c-9f3d-4b8e-a7c6-5d9e8f1a2b3c** - Business Transaction Account (BANK, default)
+2. **ba2f5b3d-8e4c-4a7f-b6d5-4c8a7b2e3f1d** - Business Savings Account (BANK)
+3. **ba3a6c4e-9d5b-4f8a-c7e6-3d9f8a1c4e2f** - Credit Card Account (CREDITCARD)
+4. **ba4a7d5f-8c6a-4e9b-d8f7-2c8e9b1d5f3a** - Second Org Account (different org)
+
+## Notes
+- The test user has admin role in the main test organization
+- The test user has user role in the second organization
+- Bearer token is configured to not expire (for testing only)
+- Make sure the API server is running on http://localhost:8001
