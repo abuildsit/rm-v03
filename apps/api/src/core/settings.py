@@ -10,6 +10,15 @@ class Settings(BaseSettings):
     supabase_anon_key: str | None = None
     jwt_secret: str | None = None
 
+    # Xero OAuth configuration
+    XERO_CLIENT_ID: str | None = None
+    XERO_CLIENT_SECRET: str | None = None
+    XERO_REDIRECT_URI: str | None = None
+    XERO_SCOPES: str = (
+        "openid profile email accounting.transactions "
+        "accounting.settings offline_access"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

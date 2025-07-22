@@ -18,6 +18,7 @@ from src.main import app
 
 # Import fixtures from fixture modules
 from tests.fixtures.organization_fixtures import *  # noqa: F403, F401
+from tests.fixtures.xero_fixtures import *  # noqa: F403, F401
 
 # Set test environment variables
 os.environ["JWT_SECRET"] = "test-secret-key-for-testing-only-32-chars"
@@ -47,6 +48,13 @@ def mock_prisma() -> Mock:
     mock_db.profile.find_unique = AsyncMock()
     mock_db.invoice.find_many = AsyncMock()
     mock_db.invoice.count = AsyncMock()
+
+    # Xero integration mocks
+    mock_db.xeroconnection.find_first = AsyncMock()
+    mock_db.xeroconnection.create = AsyncMock()
+    mock_db.xeroconnection.update = AsyncMock()
+    mock_db.xeroconnection.delete = AsyncMock()
+
     return mock_db
 
 
@@ -88,6 +96,12 @@ def auth_headers(valid_jwt_token: str) -> Dict[str, str]:
 @pytest.fixture
 def test_client() -> TestClient:
     """FastAPI test client for API endpoint testing."""
+    return TestClient(app)
+
+
+@pytest.fixture
+def client() -> TestClient:
+    """Alias for test_client to match existing test patterns."""
     return TestClient(app)
 
 
