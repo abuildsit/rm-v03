@@ -508,8 +508,7 @@ class TestGetOrganizationMembersRoute:
         self, mock_profile: Mock
     ):
         """Test permission checking integration with require_permission dependency."""
-        from src.domains.organizations.dependencies import require_permission
-        from src.domains.organizations.permissions import Permission
+        from src.shared.permissions import Permission, require_permission
 
         org_id = uuid4()
 

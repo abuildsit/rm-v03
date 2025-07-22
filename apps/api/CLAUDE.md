@@ -72,6 +72,11 @@ There are 16 lint issues documented in `lint-issues.md`:
 - Supabase local development stack runs on ports 54321-54327
 - Prisma schema changes require running `prisma generate` before code changes
 - All business logic should follow domain-driven design patterns
-- Type annotations are required (enforced by mypy strict mode)
 - Database operations use organization-scoped queries for multi-tenancy
+
+### TYPE SAFETY FIRST ###
+- This is a type-safe first project.
+- Type annotations are required (enforced by mypy strict mode)
 - NEVER use type ignore comments (# type: ignore) - always fix the underlying type issue properly
+- NEVER use Any type.
+- Where possible, types should be inherited/derived from prisma schema

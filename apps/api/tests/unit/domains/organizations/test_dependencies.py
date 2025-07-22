@@ -11,8 +11,7 @@ from fastapi import HTTPException
 from prisma.enums import OrganizationRole
 from prisma.models import OrganizationMember, Profile
 
-from src.domains.organizations.dependencies import require_permission
-from src.domains.organizations.permissions import Permission
+from src.shared.permissions import Permission, require_permission
 
 
 class TestRequirePermissionFactory:
@@ -59,11 +58,11 @@ class TestRequirePermissionFactory:
     def test_require_permission_factory_creates_different_functions(self):
         """Test that factory creates different functions for different permissions."""
         view_dependency = require_permission(Permission.VIEW_MEMBERS)
-        invite_dependency = require_permission(Permission.INVITE_MEMBERS)
+        manage_dependency = require_permission(Permission.MANAGE_MEMBERS)
 
-        assert view_dependency != invite_dependency
+        assert view_dependency != manage_dependency
         assert callable(view_dependency)
-        assert callable(invite_dependency)
+        assert callable(manage_dependency)
 
     @pytest.mark.asyncio
     async def test_dependency_validates_permission_success_admin(
@@ -74,7 +73,7 @@ class TestRequirePermissionFactory:
 
         # Mock the validate_organization_access function
         with patch(
-            "src.domains.organizations.dependencies.validate_organization_access",
+            "src.shared.permissions.dependencies.validate_organization_access",
             new_callable=AsyncMock,
         ) as mock_validate:
             mock_validate.return_value = mock_admin_membership
@@ -106,7 +105,7 @@ class TestRequirePermissionFactory:
 
         # Mock the validate_organization_access function
         with patch(
-            "src.domains.organizations.dependencies.validate_organization_access",
+            "src.shared.permissions.dependencies.validate_organization_access",
             new_callable=AsyncMock,
         ) as mock_validate:
             mock_validate.return_value = owner_membership
@@ -137,7 +136,7 @@ class TestRequirePermissionFactory:
 
         # Mock the validate_organization_access function
         with patch(
-            "src.domains.organizations.dependencies.validate_organization_access",
+            "src.shared.permissions.dependencies.validate_organization_access",
             new_callable=AsyncMock,
         ) as mock_validate:
             mock_validate.return_value = auditor_membership
@@ -163,7 +162,7 @@ class TestRequirePermissionFactory:
 
         # Mock the validate_organization_access function
         with patch(
-            "src.domains.organizations.dependencies.validate_organization_access",
+            "src.shared.permissions.dependencies.validate_organization_access",
             new_callable=AsyncMock,
         ) as mock_validate:
             mock_validate.return_value = mock_user_membership
@@ -191,7 +190,7 @@ class TestRequirePermissionFactory:
 
         # Mock the validate_organization_access function
         with patch(
-            "src.domains.organizations.dependencies.validate_organization_access",
+            "src.shared.permissions.dependencies.validate_organization_access",
             new_callable=AsyncMock,
         ) as mock_validate:
             mock_validate.return_value = mock_admin_membership
@@ -219,7 +218,7 @@ class TestRequirePermissionFactory:
 
         # Mock the validate_organization_access function to raise HTTPException
         with patch(
-            "src.domains.organizations.dependencies.validate_organization_access",
+            "src.shared.permissions.dependencies.validate_organization_access",
             new_callable=AsyncMock,
         ) as mock_validate:
             mock_validate.side_effect = HTTPException(
@@ -248,7 +247,7 @@ class TestRequirePermissionFactory:
 
         # Mock the validate_organization_access function
         with patch(
-            "src.domains.organizations.dependencies.validate_organization_access",
+            "src.shared.permissions.dependencies.validate_organization_access",
             new_callable=AsyncMock,
         ) as mock_validate:
             mock_validate.return_value = mock_admin_membership
@@ -279,19 +278,19 @@ class TestRequirePermissionFactory:
 
         # Mock the validate_organization_access function
         with patch(
-            "src.domains.organizations.dependencies.validate_organization_access",
+            "src.shared.permissions.dependencies.validate_organization_access",
             new_callable=AsyncMock,
         ) as mock_validate:
             mock_validate.return_value = mock_admin_membership
 
             # Test multiple permissions that admin should have
             view_permission = require_permission(Permission.VIEW_MEMBERS)
-            invite_permission = require_permission(Permission.INVITE_MEMBERS)
+            manage_permission = require_permission(Permission.MANAGE_MEMBERS)
             edit_permission = require_permission(Permission.EDIT_ORGANIZATION)
 
             # All should succeed for admin
             result1 = await view_permission(org_id, mock_profile, mock_db)
-            result2 = await invite_permission(org_id, mock_profile, mock_db)
+            result2 = await manage_permission(org_id, mock_profile, mock_db)
             result3 = await edit_permission(org_id, mock_profile, mock_db)
 
             assert result1 == mock_admin_membership

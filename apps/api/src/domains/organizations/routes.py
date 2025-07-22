@@ -9,14 +9,14 @@ from prisma import Prisma
 from src.core.database import get_db
 from src.domains.auth.dependencies import get_current_profile
 from src.domains.auth.models import SessionState
-from src.domains.organizations.dependencies import require_permission
 from src.domains.organizations.models import (
     CreateOrganizationResponse,
     OrganizationCreate,
     OrganizationMemberResponse,
+    UpdateOrganizationMemberRequest,
 )
-from src.domains.organizations.permissions import Permission
 from src.domains.organizations.service import OrganizationService
+from src.shared.permissions import Permission, require_permission
 
 # Add a prefix and tag to group this route clearly in OpenAPI
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
@@ -83,3 +83,44 @@ async def get_organization_members(
     """
     service = OrganizationService(db)
     return await service.get_organization_members(str(org_id))
+
+
+@router.patch(
+    "/{org_id}/members/{member_id}",
+    response_model=OrganizationMemberResponse,
+    operation_id="updateOrganizationMember",
+)
+async def update_organization_member(
+    org_id: UUID,
+    member_id: UUID,
+    updates: UpdateOrganizationMemberRequest,
+    membership: OrganizationMember = Depends(
+        require_permission(Permission.MANAGE_MEMBERS)
+    ),
+    profile: Profile = Depends(get_current_profile),
+    db: Prisma = Depends(get_db),
+) -> OrganizationMemberResponse:
+    """
+    Update an organization member.
+
+    This endpoint allows updating member status (e.g., soft deletion by setting
+    status to 'removed'). Access is restricted to users with MANAGE_MEMBERS
+    permission (typically owners and admins).
+
+    Business rules:
+    - Cannot remove yourself from the organization
+    - Cannot remove the last owner (maintains organization access)
+    - Can only remove active members
+
+    Args:
+        org_id: Organization ID
+        member_id: Profile ID of the member to update
+        updates: The updates to apply (currently supports status changes)
+
+    Returns:
+        Updated organization member details
+    """
+    service = OrganizationService(db)
+    return await service.update_organization_member(
+        str(org_id), str(member_id), updates, profile
+    )
