@@ -26,6 +26,13 @@ class Permission(Enum):
     VIEW_INTEGRATIONS = "view_integrations"  # View integration connection status
     MANAGE_INTEGRATIONS = "manage_integrations"  # Connect/disconnect integrations
 
+    # Invoice permissions
+    VIEW_INVOICES = "view_invoices"  # View invoice list and details
+    SYNC_INVOICES = "sync_invoices"  # Trigger invoice synchronization
+
+    # Payment permissions (for future use)
+    CREATE_PAYMENTS = "create_payments"  # Create payments in accounting system
+
 
 ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
     OrganizationRole.owner: {
@@ -38,6 +45,9 @@ ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
         Permission.MANAGE_BANK_ACCOUNTS,
         Permission.VIEW_INTEGRATIONS,
         Permission.MANAGE_INTEGRATIONS,
+        Permission.VIEW_INVOICES,
+        Permission.SYNC_INVOICES,
+        Permission.CREATE_PAYMENTS,
     },
     OrganizationRole.admin: {
         # Admins have everything except billing management
@@ -48,12 +58,16 @@ ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
         Permission.MANAGE_BANK_ACCOUNTS,
         Permission.VIEW_INTEGRATIONS,
         Permission.MANAGE_INTEGRATIONS,
+        Permission.VIEW_INVOICES,
+        Permission.SYNC_INVOICES,
+        Permission.CREATE_PAYMENTS,
     },
     OrganizationRole.auditor: {
         # Auditors have read-only access
         Permission.VIEW_MEMBERS,
         Permission.VIEW_BANK_ACCOUNTS,
         Permission.VIEW_INTEGRATIONS,
+        Permission.VIEW_INVOICES,
     },
     OrganizationRole.user: {
         # Basic users can view bank accounts for transparency

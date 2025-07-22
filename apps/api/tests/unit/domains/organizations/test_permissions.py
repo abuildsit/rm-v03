@@ -28,6 +28,9 @@ class TestPermissionEnum:
             "MANAGE_BANK_ACCOUNTS",
             "VIEW_INTEGRATIONS",
             "MANAGE_INTEGRATIONS",
+            "VIEW_INVOICES",
+            "SYNC_INVOICES",
+            "CREATE_PAYMENTS",
         }
 
         actual_permissions = {permission.name for permission in Permission}
@@ -54,7 +57,7 @@ class TestRolePermissions:
         all_permissions = set(Permission)
 
         assert owner_permissions == all_permissions
-        assert len(owner_permissions) == 8
+        assert len(owner_permissions) == 11
 
     def test_admin_has_most_permissions_except_billing(self):
         """Test that admin role has most permissions except billing management."""
@@ -67,11 +70,14 @@ class TestRolePermissions:
             Permission.MANAGE_BANK_ACCOUNTS,
             Permission.VIEW_INTEGRATIONS,
             Permission.MANAGE_INTEGRATIONS,
+            Permission.VIEW_INVOICES,
+            Permission.SYNC_INVOICES,
+            Permission.CREATE_PAYMENTS,
         }
 
         assert admin_permissions == expected_admin_permissions
         assert Permission.MANAGE_BILLING not in admin_permissions
-        assert len(admin_permissions) == 7
+        assert len(admin_permissions) == 10
 
     def test_auditor_has_limited_permissions(self):
         """Test that auditor role has only view permissions."""
@@ -80,10 +86,11 @@ class TestRolePermissions:
             Permission.VIEW_MEMBERS,
             Permission.VIEW_BANK_ACCOUNTS,
             Permission.VIEW_INTEGRATIONS,
+            Permission.VIEW_INVOICES,
         }
 
         assert auditor_permissions == expected_auditor_permissions
-        assert len(auditor_permissions) == 3
+        assert len(auditor_permissions) == 4
 
     def test_user_has_no_special_permissions(self):
         """Test that user role has minimal permissions."""

@@ -126,6 +126,11 @@ async def xero_oauth_callback(
         service = XeroService(db)
         connection_response = await service.complete_connection(callback_params)
 
+        # Trigger initial sync (non-blocking)
+        import asyncio
+
+        asyncio.create_task(_initial_sync(connection_response.organization_id, db))
+
         # Redirect to dashboard with success
         return RedirectResponse(
             url=(
@@ -222,3 +227,63 @@ async def disconnect_xero(
     """
     service = XeroService(db)
     return await service.disconnect(str(org_id))
+
+
+async def _initial_sync(org_id: str, db: Prisma) -> None:
+    """
+    Perform initial sync of accounts and invoices after Xero connection.
+
+    This runs in the background and does not block the callback response.
+    Syncs accounts first (typically faster), then invoices.
+
+    Args:
+        org_id: Organization ID
+        db: Database connection
+    """
+    import logging
+
+    from src.domains.integrations.base import IntegrationFactory, SyncOrchestrator
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        factory = IntegrationFactory(db)
+        data_service = await factory.get_data_service(org_id)
+        orchestrator = SyncOrchestrator(db)
+
+        # Sync accounts first (usually smaller dataset)
+        logger.info(f"Starting initial account sync for organization {org_id}")
+        account_result = await orchestrator.sync_accounts(
+            data_service=data_service, org_id=org_id
+        )
+
+        if account_result.success:
+            logger.info(
+                f"Initial account sync completed for {org_id}: "
+                f"{account_result.count} accounts in "
+                f"{account_result.duration_seconds:.1f}s"
+            )
+        else:
+            logger.error(
+                f"Initial account sync failed for {org_id}: {account_result.error}"
+            )
+
+        # Sync last 12 months of invoices
+        logger.info(f"Starting initial invoice sync for organization {org_id}")
+        invoice_result = await orchestrator.sync_invoices(
+            data_service=data_service, org_id=org_id, incremental=False, months_back=12
+        )
+
+        if invoice_result.success:
+            logger.info(
+                f"Initial invoice sync completed for {org_id}: "
+                f"{invoice_result.count} invoices in "
+                f"{invoice_result.duration_seconds:.1f}s"
+            )
+        else:
+            logger.error(
+                f"Initial invoice sync failed for {org_id}: {invoice_result.error}"
+            )
+
+    except Exception as e:
+        logger.error(f"Initial sync failed for {org_id}: {e}", exc_info=True)

@@ -26,6 +26,13 @@ class TestPermissionEnum:
         assert Permission.VIEW_INTEGRATIONS.value == "view_integrations"
         assert Permission.MANAGE_INTEGRATIONS.value == "manage_integrations"
 
+        # Invoice permissions
+        assert Permission.VIEW_INVOICES.value == "view_invoices"
+        assert Permission.SYNC_INVOICES.value == "sync_invoices"
+
+        # Payment permissions
+        assert Permission.CREATE_PAYMENTS.value == "create_payments"
+
     def test_permission_enum_completeness(self):
         """Test that we have all expected permissions."""
         expected_permissions = {
@@ -37,6 +44,9 @@ class TestPermissionEnum:
             "MANAGE_BANK_ACCOUNTS",
             "VIEW_INTEGRATIONS",
             "MANAGE_INTEGRATIONS",
+            "VIEW_INVOICES",
+            "SYNC_INVOICES",
+            "CREATE_PAYMENTS",
         }
 
         actual_permissions = {p.name for p in Permission}
@@ -75,6 +85,9 @@ class TestRolePermissions:
         assert Permission.MANAGE_BANK_ACCOUNTS in owner_permissions
         assert Permission.VIEW_INTEGRATIONS in owner_permissions
         assert Permission.MANAGE_INTEGRATIONS in owner_permissions
+        assert Permission.VIEW_INVOICES in owner_permissions
+        assert Permission.SYNC_INVOICES in owner_permissions
+        assert Permission.CREATE_PAYMENTS in owner_permissions
 
     def test_admin_permissions(self):
         """Test that admins have everything except billing."""
@@ -88,6 +101,9 @@ class TestRolePermissions:
             Permission.MANAGE_BANK_ACCOUNTS,
             Permission.VIEW_INTEGRATIONS,
             Permission.MANAGE_INTEGRATIONS,
+            Permission.VIEW_INVOICES,
+            Permission.SYNC_INVOICES,
+            Permission.CREATE_PAYMENTS,
         }
 
         assert admin_permissions == expected_admin_permissions
@@ -103,6 +119,7 @@ class TestRolePermissions:
             Permission.VIEW_MEMBERS,
             Permission.VIEW_BANK_ACCOUNTS,
             Permission.VIEW_INTEGRATIONS,
+            Permission.VIEW_INVOICES,
         }
 
         assert auditor_permissions == expected_auditor_permissions
