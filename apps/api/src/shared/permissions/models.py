@@ -22,6 +22,10 @@ class Permission(Enum):
     VIEW_BANK_ACCOUNTS = "view_bank_accounts"  # View bank account details
     MANAGE_BANK_ACCOUNTS = "manage_bank_accounts"  # Update bank account settings
 
+    # Integration permissions
+    VIEW_INTEGRATIONS = "view_integrations"  # View integration connection status
+    MANAGE_INTEGRATIONS = "manage_integrations"  # Connect/disconnect integrations
+
 
 ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
     OrganizationRole.owner: {
@@ -32,6 +36,8 @@ ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
         Permission.EDIT_ORGANIZATION,
         Permission.VIEW_BANK_ACCOUNTS,
         Permission.MANAGE_BANK_ACCOUNTS,
+        Permission.VIEW_INTEGRATIONS,
+        Permission.MANAGE_INTEGRATIONS,
     },
     OrganizationRole.admin: {
         # Admins have everything except billing management
@@ -40,11 +46,14 @@ ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
         Permission.EDIT_ORGANIZATION,
         Permission.VIEW_BANK_ACCOUNTS,
         Permission.MANAGE_BANK_ACCOUNTS,
+        Permission.VIEW_INTEGRATIONS,
+        Permission.MANAGE_INTEGRATIONS,
     },
     OrganizationRole.auditor: {
         # Auditors have read-only access
         Permission.VIEW_MEMBERS,
         Permission.VIEW_BANK_ACCOUNTS,
+        Permission.VIEW_INTEGRATIONS,
     },
     OrganizationRole.user: {
         # Basic users can view bank accounts for transparency

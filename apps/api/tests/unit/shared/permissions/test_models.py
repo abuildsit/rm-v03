@@ -22,6 +22,10 @@ class TestPermissionEnum:
         assert Permission.VIEW_BANK_ACCOUNTS.value == "view_bank_accounts"
         assert Permission.MANAGE_BANK_ACCOUNTS.value == "manage_bank_accounts"
 
+        # Integration permissions
+        assert Permission.VIEW_INTEGRATIONS.value == "view_integrations"
+        assert Permission.MANAGE_INTEGRATIONS.value == "manage_integrations"
+
     def test_permission_enum_completeness(self):
         """Test that we have all expected permissions."""
         expected_permissions = {
@@ -31,6 +35,8 @@ class TestPermissionEnum:
             "EDIT_ORGANIZATION",
             "VIEW_BANK_ACCOUNTS",
             "MANAGE_BANK_ACCOUNTS",
+            "VIEW_INTEGRATIONS",
+            "MANAGE_INTEGRATIONS",
         }
 
         actual_permissions = {p.name for p in Permission}
@@ -67,6 +73,8 @@ class TestRolePermissions:
         assert Permission.EDIT_ORGANIZATION in owner_permissions
         assert Permission.VIEW_BANK_ACCOUNTS in owner_permissions
         assert Permission.MANAGE_BANK_ACCOUNTS in owner_permissions
+        assert Permission.VIEW_INTEGRATIONS in owner_permissions
+        assert Permission.MANAGE_INTEGRATIONS in owner_permissions
 
     def test_admin_permissions(self):
         """Test that admins have everything except billing."""
@@ -78,6 +86,8 @@ class TestRolePermissions:
             Permission.EDIT_ORGANIZATION,
             Permission.VIEW_BANK_ACCOUNTS,
             Permission.MANAGE_BANK_ACCOUNTS,
+            Permission.VIEW_INTEGRATIONS,
+            Permission.MANAGE_INTEGRATIONS,
         }
 
         assert admin_permissions == expected_admin_permissions
@@ -92,6 +102,7 @@ class TestRolePermissions:
         expected_auditor_permissions = {
             Permission.VIEW_MEMBERS,
             Permission.VIEW_BANK_ACCOUNTS,
+            Permission.VIEW_INTEGRATIONS,
         }
 
         assert auditor_permissions == expected_auditor_permissions

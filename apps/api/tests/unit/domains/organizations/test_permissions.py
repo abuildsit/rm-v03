@@ -26,6 +26,8 @@ class TestPermissionEnum:
             "EDIT_ORGANIZATION",
             "VIEW_BANK_ACCOUNTS",
             "MANAGE_BANK_ACCOUNTS",
+            "VIEW_INTEGRATIONS",
+            "MANAGE_INTEGRATIONS",
         }
 
         actual_permissions = {permission.name for permission in Permission}
@@ -39,6 +41,8 @@ class TestPermissionEnum:
         assert Permission.EDIT_ORGANIZATION.value == "edit_organization"
         assert Permission.VIEW_BANK_ACCOUNTS.value == "view_bank_accounts"
         assert Permission.MANAGE_BANK_ACCOUNTS.value == "manage_bank_accounts"
+        assert Permission.VIEW_INTEGRATIONS.value == "view_integrations"
+        assert Permission.MANAGE_INTEGRATIONS.value == "manage_integrations"
 
 
 class TestRolePermissions:
@@ -50,7 +54,7 @@ class TestRolePermissions:
         all_permissions = set(Permission)
 
         assert owner_permissions == all_permissions
-        assert len(owner_permissions) == 6
+        assert len(owner_permissions) == 8
 
     def test_admin_has_most_permissions_except_billing(self):
         """Test that admin role has most permissions except billing management."""
@@ -61,11 +65,13 @@ class TestRolePermissions:
             Permission.EDIT_ORGANIZATION,
             Permission.VIEW_BANK_ACCOUNTS,
             Permission.MANAGE_BANK_ACCOUNTS,
+            Permission.VIEW_INTEGRATIONS,
+            Permission.MANAGE_INTEGRATIONS,
         }
 
         assert admin_permissions == expected_admin_permissions
         assert Permission.MANAGE_BILLING not in admin_permissions
-        assert len(admin_permissions) == 5
+        assert len(admin_permissions) == 7
 
     def test_auditor_has_limited_permissions(self):
         """Test that auditor role has only view permissions."""
@@ -73,10 +79,11 @@ class TestRolePermissions:
         expected_auditor_permissions = {
             Permission.VIEW_MEMBERS,
             Permission.VIEW_BANK_ACCOUNTS,
+            Permission.VIEW_INTEGRATIONS,
         }
 
         assert auditor_permissions == expected_auditor_permissions
-        assert len(auditor_permissions) == 2
+        assert len(auditor_permissions) == 3
 
     def test_user_has_no_special_permissions(self):
         """Test that user role has minimal permissions."""
