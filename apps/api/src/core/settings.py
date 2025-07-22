@@ -12,10 +12,13 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str | None = None
     JWT_SECRET: str | None = None
 
+    # Application URLs
+    APP_BASE_URL: str = "http://localhost:8001"  # Default for development
+    FRONTEND_URL: str | None = None
+
     # Xero OAuth configuration
     XERO_CLIENT_ID: str | None = None
     XERO_CLIENT_SECRET: str | None = None
-    XERO_REDIRECT_URI: str | None = None
     XERO_SCOPES: str = (
         "openid profile email accounting.transactions "
         "accounting.settings offline_access"

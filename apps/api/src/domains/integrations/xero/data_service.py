@@ -44,18 +44,24 @@ class XeroDataService(BaseIntegrationDataService):
 
             where_clauses = []
             if filters.get("status"):
-                status_list = ",".join([f'"{s}"' for s in filters["status"]])
-                where_clauses.append(f"Status=={status_list}")
+                # Build OR conditions for multiple statuses
+                status_conditions = [f'Status=="{s}"' for s in filters["status"]]
+                where_clauses.append(f"({' OR '.join(status_conditions)})")
 
             if filters.get("date_from"):
                 date_from_dt = cast(datetime, filters["date_from"])
-                date_str = date_from_dt.strftime("%Y-%m-%d")
-                where_clauses.append(f'Date>=DateTime("{date_str}")')
+                # Xero DateTime format: DateTime(year,month,day)
+                y, m, d = date_from_dt.year, date_from_dt.month, date_from_dt.day
+                date_str = f"DateTime({y},{m},{d})"
+                where_clauses.append(f"Date>={date_str}")
 
             if filters.get("date_to"):
                 date_to_dt = cast(datetime, filters["date_to"])
-                date_str = date_to_dt.strftime("%Y-%m-%d")
-                where_clauses.append(f'Date<=DateTime("{date_str}")')
+                # Xero DateTime format: DateTime(year,month,day)
+                date_str = (
+                    f"DateTime({date_to_dt.year},{date_to_dt.month},{date_to_dt.day})"
+                )
+                where_clauses.append(f"Date<={date_str}")
 
             if where_clauses:
                 params["where"] = " AND ".join(where_clauses)
@@ -94,10 +100,12 @@ class XeroDataService(BaseIntegrationDataService):
         """
         params: Dict[str, Any] = {}
 
-        where_clauses = ["Type=='BANK'"]
+        where_clauses = ['Type=="BANK"']
+        # Note: We only sync BANK type accounts as specified in PRD
         if filters.get("types"):
-            type_list = ",".join([f'"{t}"' for t in filters["types"]])
-            where_clauses = [f"Type=={type_list}"]
+            # Build OR conditions for multiple types
+            type_conditions = [f'Type=="{t}"' for t in filters["types"]]
+            where_clauses = [f"({' OR '.join(type_conditions)})"]
 
         params["where"] = " AND ".join(where_clauses)
 

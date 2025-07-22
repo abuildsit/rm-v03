@@ -1,5 +1,5 @@
 # apps/api/src/domains/integrations/xero/models.py
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from prisma.enums import XeroConnectionStatus as PrismaXeroConnectionStatus
@@ -60,7 +60,7 @@ class XeroConnectionStatus(BaseModel):
 
         is_connected = (
             connection.connectionStatus == PrismaXeroConnectionStatus.connected
-            and connection.expiresAt > datetime.now()
+            and connection.expiresAt > datetime.now(timezone.utc)
         )
 
         return cls(

@@ -1,6 +1,6 @@
 # tests/fixtures/xero_fixtures.py
 """Test fixtures for Xero integration tests."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 from unittest.mock import Mock
 
@@ -20,10 +20,10 @@ def mock_xero_connection() -> Mock:
     connection.tenantType = "ORGANISATION"
     connection.accessToken = "test-access-token"
     connection.refreshToken = "test-refresh-token"
-    connection.expiresAt = datetime.now() + timedelta(hours=1)
+    connection.expiresAt = datetime.now(timezone.utc) + timedelta(hours=1)
     connection.connectionStatus = XeroConnectionStatus.connected
     connection.lastError = None
-    connection.lastRefreshedAt = datetime.now() - timedelta(minutes=30)
+    connection.lastRefreshedAt = datetime.now(timezone.utc) - timedelta(minutes=30)
     connection.refreshAttempts = 0
     connection.scopes = ["openid", "profile", "email", "accounting.transactions"]
     connection.authEventId = "test-auth-event-id"
@@ -31,8 +31,8 @@ def mock_xero_connection() -> Mock:
     connection.syncStatus = None
     connection.syncError = None
     connection.createdBy = "test-profile-id"
-    connection.createdAt = datetime.now() - timedelta(days=1)
-    connection.updatedAt = datetime.now()
+    connection.createdAt = datetime.now(timezone.utc) - timedelta(days=1)
+    connection.updatedAt = datetime.now(timezone.utc)
     return connection
 
 
@@ -47,15 +47,15 @@ def mock_expired_xero_connection() -> Mock:
     connection.tenantType = "ORGANISATION"
     connection.accessToken = "expired-access-token"
     connection.refreshToken = "test-refresh-token"
-    connection.expiresAt = datetime.now() - timedelta(hours=1)  # Expired
+    connection.expiresAt = datetime.now(timezone.utc) - timedelta(hours=1)  # Expired
     connection.connectionStatus = XeroConnectionStatus.expired
     connection.lastError = "Token expired"
-    connection.lastRefreshedAt = datetime.now() - timedelta(hours=2)
+    connection.lastRefreshedAt = datetime.now(timezone.utc) - timedelta(hours=2)
     connection.refreshAttempts = 0
     connection.scopes = ["openid", "profile", "email", "accounting.transactions"]
     connection.createdBy = "test-profile-id"
-    connection.createdAt = datetime.now() - timedelta(days=1)
-    connection.updatedAt = datetime.now() - timedelta(hours=1)
+    connection.createdAt = datetime.now(timezone.utc) - timedelta(days=1)
+    connection.updatedAt = datetime.now(timezone.utc) - timedelta(hours=1)
     return connection
 
 
@@ -70,15 +70,15 @@ def mock_revoked_xero_connection() -> Mock:
     connection.tenantType = "ORGANISATION"
     connection.accessToken = "revoked-access-token"
     connection.refreshToken = "revoked-refresh-token"
-    connection.expiresAt = datetime.now() + timedelta(hours=1)
+    connection.expiresAt = datetime.now(timezone.utc) + timedelta(hours=1)
     connection.connectionStatus = XeroConnectionStatus.revoked
     connection.lastError = None
-    connection.lastRefreshedAt = datetime.now() - timedelta(days=1)
+    connection.lastRefreshedAt = datetime.now(timezone.utc) - timedelta(days=1)
     connection.refreshAttempts = 0
     connection.scopes = ["openid", "profile", "email", "accounting.transactions"]
     connection.createdBy = "test-profile-id"
-    connection.createdAt = datetime.now() - timedelta(days=1)
-    connection.updatedAt = datetime.now()
+    connection.createdAt = datetime.now(timezone.utc) - timedelta(days=1)
+    connection.updatedAt = datetime.now(timezone.utc)
     return connection
 
 
@@ -149,12 +149,12 @@ def xero_oauth_callback_error_params() -> Dict[str, str]:
 @pytest.fixture
 def mock_jwt_state_token_payload() -> Dict[str, Any]:
     """Mock JWT state token payload."""
-    expires_at = datetime.now() + timedelta(minutes=30)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
     return {
         "org_id": "test-org-id",
         "user_id": "test-profile-id",
         "csrf_token": "test-csrf-token-12345",
-        "issued_at": datetime.now().isoformat(),
+        "issued_at": datetime.now(timezone.utc).isoformat(),
         "expires_at": expires_at.isoformat(),
     }
 

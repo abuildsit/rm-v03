@@ -2,7 +2,7 @@
 """
 Tests for XeroService OAuth and token management functionality.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -66,7 +66,7 @@ class TestXeroService:
         assert "https://login.xero.com/identity/connect/authorize" in result.auth_url
         assert "client_id=test-client-id" in result.auth_url
         assert "state=test-jwt-token" in result.auth_url
-        assert result.expires_at > datetime.now()
+        assert result.expires_at > datetime.now(timezone.utc)
 
         # Verify database query
         mock_prisma.xeroconnection.find_first.assert_called_once_with(
@@ -185,8 +185,8 @@ class TestXeroService:
             tenantId="new-tenant-id",
             tenantName="New Organization",
             tenantType="ORGANISATION",
-            createdDateUtc=datetime.now(),
-            updatedDateUtc=datetime.now(),
+            createdDateUtc=datetime.now(timezone.utc),
+            updatedDateUtc=datetime.now(timezone.utc),
         )
 
         # Act & Assert
@@ -418,7 +418,7 @@ class TestXeroService:
         # Arrange
         org_id = "test-org-id"
         user_id = "test-profile-id"
-        expires_at = datetime.now() + timedelta(minutes=30)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
 
         # Act
         with patch(
@@ -469,9 +469,9 @@ class TestXeroService:
             "org_id": "test-org-id",
             "user_id": "test-profile-id",
             "csrf_token": "test-csrf-token",
-            "issued_at": (datetime.now() - timedelta(hours=1)).isoformat(),
+            "issued_at": (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),
             "expires_at": (
-                datetime.now() - timedelta(minutes=30)
+                datetime.now(timezone.utc) - timedelta(minutes=30)
             ).isoformat(),  # Expired
         }
 

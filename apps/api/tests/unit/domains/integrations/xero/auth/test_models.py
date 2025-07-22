@@ -2,7 +2,7 @@
 """
 Tests for Xero integration Pydantic models.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -33,7 +33,7 @@ class TestXeroModels:
     def test_xero_auth_url_response_valid(self) -> None:
         """Test XeroAuthUrlResponse with valid data."""
         # Arrange
-        expires_at = datetime.now() + timedelta(minutes=30)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
         data = {
             "auth_url": "https://login.xero.com/identity/connect/authorize?...",
             "expires_at": expires_at,
@@ -66,11 +66,11 @@ class TestXeroModels:
         # Arrange
         mock_connection = Mock(spec=XeroConnection)
         mock_connection.connectionStatus = XeroConnectionStatus.connected
-        mock_connection.expiresAt = datetime.now() + timedelta(hours=1)
+        mock_connection.expiresAt = datetime.now(timezone.utc) + timedelta(hours=1)
         mock_connection.xeroTenantId = "test-tenant-id"
         mock_connection.tenantName = "Test Organization"
-        mock_connection.lastRefreshedAt = datetime.now()
-        mock_connection.createdAt = datetime.now() - timedelta(days=1)
+        mock_connection.lastRefreshedAt = datetime.now(timezone.utc)
+        mock_connection.createdAt = datetime.now(timezone.utc) - timedelta(days=1)
         mock_connection.lastError = None
         mock_connection.refreshAttempts = 0
 
@@ -89,11 +89,11 @@ class TestXeroModels:
         # Arrange
         mock_connection = Mock(spec=XeroConnection)
         mock_connection.connectionStatus = XeroConnectionStatus.connected
-        mock_connection.expiresAt = datetime.now() - timedelta(hours=1)  # Expired
+        mock_connection.expiresAt = datetime.now(timezone.utc) - timedelta(hours=1)  # Expired
         mock_connection.xeroTenantId = "test-tenant-id"
         mock_connection.tenantName = "Test Organization"
-        mock_connection.lastRefreshedAt = datetime.now() - timedelta(hours=2)
-        mock_connection.createdAt = datetime.now() - timedelta(days=1)
+        mock_connection.lastRefreshedAt = datetime.now(timezone.utc) - timedelta(hours=2)
+        mock_connection.createdAt = datetime.now(timezone.utc) - timedelta(days=1)
         mock_connection.lastError = "Token expired"
         mock_connection.refreshAttempts = 1
 
@@ -236,7 +236,7 @@ class TestXeroModels:
     def test_xero_state_token_payload_valid(self) -> None:
         """Test XeroStateTokenPayload with valid data."""
         # Arrange
-        issued_at = datetime.now()
+        issued_at = datetime.now(timezone.utc)
         expires_at = issued_at + timedelta(minutes=30)
         data = {
             "org_id": "test-org-id",
@@ -259,7 +259,7 @@ class TestXeroModels:
     def test_xero_disconnect_response_valid(self) -> None:
         """Test XeroDisconnectResponse with valid data."""
         # Arrange
-        disconnected_at = datetime.now()
+        disconnected_at = datetime.now(timezone.utc)
         data = {
             "message": "Xero connection disconnected successfully",
             "disconnected_at": disconnected_at,
@@ -277,7 +277,7 @@ class TestXeroModels:
     def test_xero_connection_response_valid(self) -> None:
         """Test XeroConnectionResponse with valid data."""
         # Arrange
-        connected_at = datetime.now()
+        connected_at = datetime.now(timezone.utc)
         data = {
             "message": "Xero connection established successfully",
             "connected_at": connected_at,
@@ -331,7 +331,7 @@ class TestXeroModels:
         models_to_test = [
             XeroAuthUrlResponse(
                 auth_url="https://example.com",
-                expires_at=datetime.now(),
+                expires_at=datetime.now(timezone.utc),
                 organization_id="test-org",
             ),
             XeroConnectionStatusModel(
@@ -339,9 +339,9 @@ class TestXeroModels:
                 status="connected",
                 tenant_id="test-tenant",
                 tenant_name="Test Org",
-                expires_at=datetime.now(),
-                last_refreshed_at=datetime.now(),
-                connected_at=datetime.now(),
+                expires_at=datetime.now(timezone.utc),
+                last_refreshed_at=datetime.now(timezone.utc),
+                connected_at=datetime.now(timezone.utc),
                 last_error=None,
                 refresh_attempts=0,
             ),

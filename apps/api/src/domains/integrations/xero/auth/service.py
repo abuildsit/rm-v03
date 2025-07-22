@@ -1,6 +1,6 @@
 # apps/api/src/domains/integrations/xero/service.py
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # All required imports are used
 from urllib.parse import urlencode
@@ -40,7 +40,9 @@ class XeroService:
         self.db = db
         self.client_id = settings.XERO_CLIENT_ID
         self.client_secret = settings.XERO_CLIENT_SECRET
-        self.redirect_uri = settings.XERO_REDIRECT_URI
+        self.redirect_uri = (
+            f"{settings.APP_BASE_URL}/api/v1/integrations/auth/xero/callback"
+        )
         self.scopes = settings.XERO_SCOPES
 
         # Xero OAuth endpoints
@@ -75,7 +77,7 @@ class XeroService:
             )
 
         # Generate state token with 30-minute expiry
-        expires_at = datetime.now() + timedelta(minutes=30)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
         state_token = self._generate_state_token(org_id, user_id, expires_at)
 
         # Build authorization URL
@@ -147,7 +149,7 @@ class XeroService:
             )
 
         # Store/update connection
-        expires_at = datetime.now() + timedelta(seconds=token_response.expires_in)
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=token_response.expires_in)
 
         if existing_connection:
             await self.db.xeroconnection.update(
@@ -292,7 +294,7 @@ class XeroService:
             org_id=org_id,
             user_id=user_id,
             csrf_token=secrets.token_urlsafe(32),
-            issued_at=datetime.now(),
+            issued_at=datetime.now(timezone.utc),
             expires_at=expires_at,
         )
 
@@ -312,7 +314,7 @@ class XeroService:
             state_payload = XeroStateTokenPayload(**payload)
 
             # Check expiry
-            if datetime.now() > state_payload.expires_at:
+            if datetime.now(timezone.utc) > state_payload.expires_at:
                 raise IntegrationAuthenticationError("OAuth session expired")
 
             return state_payload
@@ -378,7 +380,7 @@ class XeroService:
     async def _get_valid_access_token(self, connection: XeroConnection) -> str:
         """Get valid access token, refreshing if necessary."""
         # Check if token needs refresh
-        if datetime.now() >= connection.expiresAt:
+        if datetime.now(timezone.utc) >= connection.expiresAt:
             return await self._refresh_access_token(connection)
 
         return connection.accessToken
@@ -404,7 +406,7 @@ class XeroService:
                 token_response = XeroTokenResponse(**token_json)
 
                 # Update stored tokens
-                expires_at = datetime.now() + timedelta(
+                expires_at = datetime.now(timezone.utc) + timedelta(
                     seconds=token_response.expires_in
                 )
                 await self.db.xeroconnection.update(
@@ -481,5 +483,5 @@ class XeroService:
         """Check if a connection is currently active."""
         return (
             connection.connectionStatus == XeroConnectionStatus.connected
-            and connection.expiresAt > datetime.now()
+            and connection.expiresAt > datetime.now(timezone.utc)
         )

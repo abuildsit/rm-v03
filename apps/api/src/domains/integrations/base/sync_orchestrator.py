@@ -1,3 +1,4 @@
+import re
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, cast
@@ -14,6 +15,41 @@ from prisma import Prisma
 
 from .data_service import BaseIntegrationDataService
 from .models import SyncResult
+
+
+def _parse_xero_date(date_str: str) -> Optional[datetime]:
+    """
+    Parse Xero API date format.
+
+    Xero returns dates in format '/Date(1748476800000+0000)/' where the number
+    is milliseconds since Unix epoch.
+
+    Args:
+        date_str: Date string from Xero API
+
+    Returns:
+        Parsed datetime object or None if parsing fails
+    """
+    if not date_str:
+        return None
+
+    # Handle both /Date()/ format and ISO format
+    if date_str.startswith("/Date("):
+        # Extract timestamp from /Date(1748476800000+0000)/
+        match = re.match(r"/Date\((\d+)([+-]\d{4})?\)/", date_str)
+        if match:
+            timestamp_ms = int(match.group(1))
+            # Convert milliseconds to seconds for Python datetime
+            timestamp_s = timestamp_ms / 1000
+            return datetime.fromtimestamp(timestamp_s, tz=None).replace(tzinfo=None)
+    else:
+        # Handle ISO format dates (fallback)
+        try:
+            return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+
+    return None
 
 
 class SyncOrchestrator:
@@ -243,16 +279,12 @@ class SyncOrchestrator:
             "contactName": invoice_data.get("Contact", {}).get("Name"),
             "contactId": invoice_data.get("Contact", {}).get("ContactID"),
             "invoiceDate": (
-                datetime.fromisoformat(
-                    invoice_data["Date"].replace("Z", "+00:00")
-                ).date()
+                _parse_xero_date(invoice_data["Date"])
                 if invoice_data.get("Date")
                 else None
             ),
             "dueDate": (
-                datetime.fromisoformat(
-                    invoice_data["DueDate"].replace("Z", "+00:00")
-                ).date()
+                _parse_xero_date(invoice_data["DueDate"])
                 if invoice_data.get("DueDate")
                 else None
             ),
@@ -299,9 +331,7 @@ class SyncOrchestrator:
             "sentToContact": invoice_data.get("SentToContact", False),
             "lastSyncedAt": datetime.now(),
             "xeroUpdatedDateUtc": (
-                datetime.fromisoformat(
-                    invoice_data["UpdatedDateUTC"].replace("Z", "+00:00")
-                )
+                _parse_xero_date(invoice_data["UpdatedDateUTC"])
                 if invoice_data.get("UpdatedDateUTC")
                 else None
             ),
@@ -322,9 +352,9 @@ class SyncOrchestrator:
         if invoice_data.get("AmountCredited"):
             update_data["amountCredited"] = float(invoice_data["AmountCredited"])
         if invoice_data.get("UpdatedDateUTC"):
-            update_data["xeroUpdatedDateUtc"] = datetime.fromisoformat(
-                invoice_data["UpdatedDateUTC"].replace("Z", "+00:00")
-            )
+            parsed_date = _parse_xero_date(invoice_data["UpdatedDateUTC"])
+            if parsed_date:
+                update_data["xeroUpdatedDateUtc"] = parsed_date
 
         return update_data
 

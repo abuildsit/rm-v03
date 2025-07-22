@@ -39,8 +39,8 @@ poetry run prisma db push   # Push schema changes to database
 - **Organizations** (`/organizations`) - Multi-tenant organization support with role-based permissions
 - **Bank Accounts** (`/bankaccounts`) - Bank account management and payment configuration
 - **Invoices** (`/invoices`) - Invoice management with status workflows
+- **Integrations** (`/integrations`) - Provider-agnostic integration sync (Xero, future providers)
 - **Remittances** - Core remittance matching (AI-powered + manual overrides)
-- **Xero Integration** - Accounting system sync
 
 ### Database Design
 Multi-tenant PostgreSQL schema with:
@@ -57,6 +57,21 @@ Multi-tenant PostgreSQL schema with:
 - **Authorization**: Role-based permissions system with fine-grained access control
 - **Package Management**: Poetry for Python dependencies
 - **Code Quality**: Black (88 char limit), isort, flake8, mypy (strict mode)
+
+## Environment Configuration
+
+### Required Settings
+- `APP_BASE_URL` - Base URL for OAuth callbacks (default: http://localhost:8001)
+- `FRONTEND_URL` - Frontend application URL for redirects
+- `XERO_CLIENT_ID` - Xero OAuth application client ID
+- `XERO_CLIENT_SECRET` - Xero OAuth application client secret
+- `JWT_SECRET` - Secret for signing state tokens (minimum 32 characters)
+
+### Supabase Settings
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Service role key for admin operations
+- `SUPABASE_ANON_KEY` - Anonymous key for client operations
+- `DATABASE_URL` - PostgreSQL connection string
 
 ## Permissions System
 
@@ -82,6 +97,13 @@ async def get_resource(
     pass
 ```
 
+### Available Permissions
+- **Organization**: `VIEW_MEMBERS`, `MANAGE_MEMBERS`, `EDIT_ORGANIZATION`, `MANAGE_BILLING`
+- **Bank Accounts**: `VIEW_BANK_ACCOUNTS`, `MANAGE_BANK_ACCOUNTS`
+- **Integrations**: `VIEW_INTEGRATIONS`, `MANAGE_INTEGRATIONS`
+- **Invoices**: `VIEW_INVOICES`, `SYNC_INVOICES`
+- **Payments**: `CREATE_PAYMENTS`
+
 ### Role Hierarchy
 - **Owner**: Full access to all permissions
 - **Admin**: Most permissions except billing management
@@ -90,9 +112,17 @@ async def get_resource(
 
 ## Current State
 
-### Known Issues
-- Project is currently in active development
-- Historical lint issues documented in `lint-issues.md` have been resolved (0 mypy issues as of last check)
+### Completed Features
+- Xero OAuth authentication and connection management
+- Provider-agnostic sync architecture with Xero implementation
+- Invoice synchronization (AUTHORISED, VOIDED, DELETED statuses)
+- Bank account synchronization  
+- Background sync operations
+- Comprehensive error handling and retry logic
+
+### Active Development
+- Enhanced remittance matching capabilities
+- Advanced filtering and search features
 
 ### API Structure
 - Base URL: `/api/v1`
@@ -102,6 +132,8 @@ async def get_resource(
   - `/organizations/{org_id}/members` - Organization member management (requires VIEW_MEMBERS permission)
   - `/bankaccounts/{org_id}` - Bank account management (requires VIEW_BANK_ACCOUNTS/MANAGE_BANK_ACCOUNTS permissions)
   - `/invoices` - Invoice management
+  - `/integrations/invoices/{org_id}` - Invoice sync (requires SYNC_INVOICES permission)
+  - `/integrations/accounts/{org_id}` - Account sync (requires MANAGE_BANK_ACCOUNTS permission)
 
 ## Development Notes
 
@@ -110,6 +142,61 @@ async def get_resource(
 - All business logic should follow domain-driven design patterns
 - Database operations use organization-scoped queries for multi-tenancy
 - Use shared permissions system for consistent authorization across domains
+- All datetime operations must use timezone-aware objects (datetime.now(timezone.utc))
+- The system handles provider-specific date formats automatically
+
+### Performance Considerations
+- Sync operations run asynchronously to avoid blocking API responses
+- Database upserts handle large datasets efficiently
+- Provider rate limits are respected automatically
+- Connection pooling via Prisma for optimal database performance
+
+## Integration Architecture
+
+### Provider-Agnostic Design
+The integrations domain uses a clean abstraction layer to support multiple accounting providers:
+
+- `src/domains/integrations/base/` - Provider-agnostic interfaces and logic
+  - `BaseIntegrationDataService` - Abstract interface for all providers
+  - `SyncOrchestrator` - Generic sync logic (database upserts, filtering)
+  - `IntegrationFactory` - Provider resolution based on organization connections
+  - `SyncResult` - Standard response model
+
+- `src/domains/integrations/xero/` - Xero-specific implementation
+  - `XeroDataService` - Implements BaseIntegrationDataService
+  - `auth/` - OAuth flow management (existing)
+
+### Usage Pattern
+```python
+# Get the right provider for an organization
+factory = IntegrationFactory(db)
+data_service = await factory.get_data_service(org_id)
+
+# Use provider-agnostic interface
+invoices = await data_service.get_invoices(org_id, filters)
+
+# Or use orchestrator for sync + database operations
+orchestrator = SyncOrchestrator(db)
+result = await orchestrator.sync_invoices(data_service, org_id, options)
+```
+
+### Sync Operation Characteristics
+- **Async Operations**: All syncs run in background tasks (non-blocking)
+- **Rate Limiting**: Respects provider limits (Xero: 60 calls/min)
+- **Pagination**: Handles large datasets (100 items/page)
+- **Incremental Sync**: Supports both full and incremental synchronization
+- **Error Handling**: Comprehensive retry logic with exponential backoff
+
+### Xero-Specific Implementation Notes
+- **Date Format Handling**: Automatically parses Xero's legacy `/Date(timestamp)/` format
+- **API Query Syntax**: Handles Xero-specific DateTime and filter requirements
+- **OAuth Integration**: Automatic initial sync triggered after successful connection
+- **Token Management**: Automatic token refresh with connection status tracking
+
+### Adding New Providers
+1. Implement `BaseIntegrationDataService` interface
+2. Add provider detection logic to `IntegrationFactory`
+3. All existing sync logic works automatically
 
 ## Testing Strategy
 
