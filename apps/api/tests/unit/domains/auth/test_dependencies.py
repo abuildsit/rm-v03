@@ -34,10 +34,10 @@ class TestDecodeSupabaseJWT:
         ):
             result = decode_supabase_jwt(token)
 
-        assert result["sub"] == "test-user-id-123"
-        assert result["email"] == "test@example.com"
-        assert result["aud"] == "authenticated"
-        assert result["iss"] == "supabase"
+        assert result.sub == "test-user-id-123"
+        assert result.email == "test@example.com"
+        assert result.aud == "authenticated"
+        assert result.iss == "supabase"
 
     def test_invalid_token_signature_raises_401(self, test_jwt_secret: str):
         """Test that invalid token signature raises 401."""
@@ -90,10 +90,12 @@ class TestGetAuthId:
         authorization = f"Bearer {valid_jwt_token}"
 
         with patch("src.domains.auth.dependencies.decode_supabase_jwt") as mock_decode:
-            mock_decode.return_value = {
-                "sub": "test-user-id-123",
-                "email": "test@example.com",
-            }
+            from src.domains.auth.types import SupabaseJwtPayload
+
+            mock_decode.return_value = SupabaseJwtPayload(
+                sub="test-user-id-123",
+                email="test@example.com",
+            )
 
             result = get_auth_id(authorization)
 
@@ -129,7 +131,11 @@ class TestGetAuthId:
         authorization = f"Bearer {valid_jwt_token}"
 
         with patch("src.domains.auth.dependencies.decode_supabase_jwt") as mock_decode:
-            mock_decode.return_value = {"sub": None, "email": "test@example.com"}
+            from src.domains.auth.types import SupabaseJwtPayload
+
+            mock_decode.return_value = SupabaseJwtPayload(
+                sub=None, email="test@example.com"
+            )
 
             result = get_auth_id(authorization)
 

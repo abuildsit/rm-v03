@@ -11,6 +11,7 @@ from src.domains.external_accounting.routes import router as external_accounting
 from src.domains.external_accounting.xero.auth.routes import router as xero_router
 from src.domains.invoices.routes import router as invoices_router
 from src.domains.organizations.routes import router as organizations_router
+from src.domains.remittances.routes import router as remittances_router
 
 
 @asynccontextmanager
@@ -44,6 +45,7 @@ app.include_router(bankaccounts_router, prefix="/api/v1")
 app.include_router(external_accounting_router)
 app.include_router(invoices_router, prefix="/api/v1")
 app.include_router(organizations_router, prefix="/api/v1")
+app.include_router(remittances_router, prefix="/api/v1")
 app.include_router(xero_router, prefix="/api/v1")
 
 

@@ -1,7 +1,8 @@
 import re
 import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, cast
+from decimal import Decimal
+from typing import Any, List, Optional, cast
 
 from prisma.enums import InvoiceStatus
 from prisma.types import (
@@ -15,6 +16,10 @@ from prisma import Prisma
 
 from .data_service import BaseIntegrationDataService
 from .models import SyncResult
+from .types import (
+    BaseAccountFilters,
+    BaseInvoiceFilters,
+)
 
 
 def _parse_xero_date(date_str: str) -> Optional[datetime]:
@@ -130,7 +135,11 @@ class SyncOrchestrator:
         start_time = time.time()
 
         try:
-            filters = {"types": account_types} if account_types else {}
+            filters = (
+                BaseAccountFilters(types=account_types, modified_since=None)
+                if account_types
+                else self._build_account_filters()
+            )
 
             accounts = await data_service.get_accounts(org_id, filters)
 
@@ -162,23 +171,34 @@ class SyncOrchestrator:
         incremental: bool,
         invoice_types: Optional[List[str]],
         months_back: int,
-    ) -> Dict[str, Any]:
+    ) -> BaseInvoiceFilters:
         """Build filters for invoice sync."""
-        filters: Dict[str, Any] = {"status": ["AUTHORISED", "VOIDED", "DELETED"]}
+        filter_data: dict[str, Any] = {"status": ["AUTHORISED", "VOIDED", "DELETED"]}
 
-        if invoice_types:
-            filters["types"] = invoice_types
+        # Note: BaseInvoiceFilters doesn't have 'types' field - invoice_types ignored
 
         if incremental:
             last_sync = await self._get_last_sync_time(org_id, "invoices")
             if last_sync:
-                filters["modified_since"] = last_sync
+                filter_data["modified_since"] = (
+                    last_sync.isoformat()
+                    if hasattr(last_sync, "isoformat")
+                    else str(last_sync)
+                )
             else:
-                filters["date_from"] = datetime.now() - timedelta(days=months_back * 30)
+                filter_data["date_from"] = (
+                    datetime.now() - timedelta(days=months_back * 30)
+                ).isoformat()
         else:
-            filters["date_from"] = datetime.now() - timedelta(days=months_back * 30)
+            filter_data["date_from"] = (
+                datetime.now() - timedelta(days=months_back * 30)
+            ).isoformat()
 
-        return filters
+        return BaseInvoiceFilters(**filter_data)
+
+    def _build_account_filters(self) -> BaseAccountFilters:
+        """Build filters for account sync."""
+        return BaseAccountFilters(types=["BANK"], modified_since=None)
 
     async def _get_last_sync_time(
         self, org_id: str, object_type: str
@@ -202,9 +222,7 @@ class SyncOrchestrator:
             else None
         )
 
-    async def _upsert_invoices(
-        self, org_id: str, invoices: List[Dict[str, Any]]
-    ) -> int:
+    async def _upsert_invoices(self, org_id: str, invoices: List[Any]) -> int:
         """Batch upsert invoices to database."""
         count = 0
 
@@ -214,18 +232,12 @@ class SyncOrchestrator:
                     where={
                         "organizationId_invoiceId": {
                             "organizationId": org_id,
-                            "invoiceId": invoice_data["InvoiceID"],
+                            "invoiceId": invoice_data.InvoiceID,
                         }
                     },
                     data={
-                        "create": cast(
-                            InvoiceCreateInput,
-                            self._map_invoice_create_data(org_id, invoice_data),
-                        ),
-                        "update": cast(
-                            InvoiceUpdateInput,
-                            self._map_invoice_update_data(invoice_data),
-                        ),
+                        "create": self._map_invoice_create_data(org_id, invoice_data),
+                        "update": self._map_invoice_update_data(invoice_data),
                     },
                 )
                 count += 1
@@ -235,9 +247,7 @@ class SyncOrchestrator:
 
         return count
 
-    async def _upsert_accounts(
-        self, org_id: str, accounts: List[Dict[str, Any]]
-    ) -> int:
+    async def _upsert_accounts(self, org_id: str, accounts: List[Any]) -> int:
         """Batch upsert accounts to database."""
         count = 0
 
@@ -247,146 +257,138 @@ class SyncOrchestrator:
                     where={
                         "organizationId_xeroAccountId": {
                             "organizationId": org_id,
-                            "xeroAccountId": account_data["AccountID"],
+                            "xeroAccountId": account_data.AccountID,
                         }
                     },
                     data={
-                        "create": cast(
-                            BankAccountCreateInput,
-                            self._map_account_create_data(org_id, account_data),
-                        ),
-                        "update": cast(
-                            BankAccountUpdateInput,
-                            self._map_account_update_data(account_data),
-                        ),
+                        "create": self._map_account_create_data(org_id, account_data),
+                        "update": self._map_account_update_data(account_data),
                     },
                 )
                 count += 1
             except Exception as e:
-                print(f"Failed to upsert account {account_data.get('AccountID')}: {e}")
+                print(f"Failed to upsert account {account_data.AccountID}: {e}")
                 continue
 
         return count
 
     def _map_invoice_create_data(
-        self, org_id: str, invoice_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, org_id: str, invoice_data: Any
+    ) -> InvoiceCreateInput:
         """Map provider invoice data to database create format."""
         return {
             "organizationId": org_id,
-            "invoiceId": invoice_data["InvoiceID"],
-            "invoiceNumber": invoice_data.get("InvoiceNumber"),
-            "contactName": invoice_data.get("Contact", {}).get("Name"),
-            "contactId": invoice_data.get("Contact", {}).get("ContactID"),
+            "invoiceId": invoice_data.InvoiceID,
+            "invoiceNumber": invoice_data.InvoiceNumber,
+            "contactName": invoice_data.Contact.Name if invoice_data.Contact else None,
+            "contactId": (
+                invoice_data.Contact.ContactID if invoice_data.Contact else None
+            ),
             "invoiceDate": (
-                _parse_xero_date(invoice_data["Date"])
-                if invoice_data.get("Date")
-                else None
+                _parse_xero_date(invoice_data.Date) if invoice_data.Date else None
             ),
             "dueDate": (
-                _parse_xero_date(invoice_data["DueDate"])
-                if invoice_data.get("DueDate")
-                else None
+                _parse_xero_date(invoice_data.DueDate) if invoice_data.DueDate else None
             ),
             "status": (
-                InvoiceStatus(invoice_data["Status"].upper())
-                if invoice_data.get("Status")
+                InvoiceStatus(invoice_data.Status.upper())
+                if invoice_data.Status
                 else None
             ),
-            "lineAmountTypes": invoice_data.get("LineAmountTypes"),
+            "lineAmountTypes": invoice_data.LineAmountTypes,
             "subTotal": (
-                float(invoice_data["SubTotal"])
-                if invoice_data.get("SubTotal")
+                Decimal(str(invoice_data.SubTotal))
+                if invoice_data.SubTotal is not None
                 else None
             ),
             "totalTax": (
-                float(invoice_data["TotalTax"])
-                if invoice_data.get("TotalTax")
+                Decimal(str(invoice_data.TotalTax))
+                if invoice_data.TotalTax is not None
                 else None
             ),
             "total": (
-                float(invoice_data["Total"]) if invoice_data.get("Total") else None
+                Decimal(str(invoice_data.Total))
+                if invoice_data.Total is not None
+                else None
             ),
             "amountDue": (
-                float(invoice_data["AmountDue"])
-                if invoice_data.get("AmountDue")
+                Decimal(str(invoice_data.AmountDue))
+                if invoice_data.AmountDue is not None
                 else None
             ),
             "amountPaid": (
-                float(invoice_data["AmountPaid"])
-                if invoice_data.get("AmountPaid")
+                Decimal(str(invoice_data.AmountPaid))
+                if invoice_data.AmountPaid is not None
                 else None
             ),
             "amountCredited": (
-                float(invoice_data["AmountCredited"])
-                if invoice_data.get("AmountCredited")
+                Decimal(str(invoice_data.AmountCredited))
+                if invoice_data.AmountCredited is not None
                 else None
             ),
-            "currencyCode": invoice_data.get("CurrencyCode", "USD"),
-            "reference": invoice_data.get("Reference"),
-            "brandId": invoice_data.get("BrandingThemeID"),
-            "hasErrors": invoice_data.get("HasErrors", False),
-            "isDiscounted": invoice_data.get("IsDiscounted", False),
-            "hasAttachments": invoice_data.get("HasAttachments", False),
-            "sentToContact": invoice_data.get("SentToContact", False),
+            "currencyCode": invoice_data.CurrencyCode or "USD",
+            "reference": invoice_data.Reference,
+            "brandId": invoice_data.BrandingThemeID,
+            "hasErrors": getattr(invoice_data, "HasErrors", False),
+            "isDiscounted": getattr(invoice_data, "IsDiscounted", False),
+            "hasAttachments": getattr(invoice_data, "HasAttachments", False),
+            "sentToContact": getattr(invoice_data, "SentToContact", False),
             "lastSyncedAt": datetime.now(),
             "xeroUpdatedDateUtc": (
-                _parse_xero_date(invoice_data["UpdatedDateUTC"])
-                if invoice_data.get("UpdatedDateUTC")
+                _parse_xero_date(invoice_data.UpdatedDateUTC)
+                if invoice_data.UpdatedDateUTC
                 else None
             ),
         }
 
-    def _map_invoice_update_data(self, invoice_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _map_invoice_update_data(self, invoice_data: Any) -> InvoiceUpdateInput:
         """Map provider invoice data to database update format."""
-        update_data: Dict[str, Any] = {
+        update_data: dict[str, Any] = {
             "lastSyncedAt": datetime.now(),
         }
 
-        if invoice_data.get("Status"):
-            update_data["status"] = InvoiceStatus(invoice_data["Status"].upper())
-        if invoice_data.get("AmountDue"):
-            update_data["amountDue"] = float(invoice_data["AmountDue"])
-        if invoice_data.get("AmountPaid"):
-            update_data["amountPaid"] = float(invoice_data["AmountPaid"])
-        if invoice_data.get("AmountCredited"):
-            update_data["amountCredited"] = float(invoice_data["AmountCredited"])
-        if invoice_data.get("UpdatedDateUTC"):
-            parsed_date = _parse_xero_date(invoice_data["UpdatedDateUTC"])
+        if invoice_data.Status:
+            update_data["status"] = InvoiceStatus(invoice_data.Status.upper())
+        if invoice_data.AmountDue is not None:
+            update_data["amountDue"] = Decimal(str(invoice_data.AmountDue))
+        if invoice_data.AmountPaid is not None:
+            update_data["amountPaid"] = Decimal(str(invoice_data.AmountPaid))
+        if invoice_data.AmountCredited is not None:
+            update_data["amountCredited"] = Decimal(str(invoice_data.AmountCredited))
+        if invoice_data.UpdatedDateUTC:
+            parsed_date = _parse_xero_date(invoice_data.UpdatedDateUTC)
             if parsed_date:
                 update_data["xeroUpdatedDateUtc"] = parsed_date
 
-        return update_data
+        return cast(InvoiceUpdateInput, update_data)
 
     def _map_account_create_data(
-        self, org_id: str, account_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, org_id: str, account_data: Any
+    ) -> BankAccountCreateInput:
         """Map provider account data to database create format."""
         return {
             "organizationId": org_id,
-            "xeroAccountId": account_data["AccountID"],
-            "xeroName": account_data.get("Name"),
-            "xeroCode": account_data.get("Code"),
-            "type": account_data.get("Type", "BANK"),
-            "status": account_data.get("Status", "ACTIVE"),
-            "bankAccountNumber": account_data.get("BankAccountNumber"),
-            "currencyCode": account_data.get("CurrencyCode", "AUD"),
-            "enablePaymentsToAccount": account_data.get(
-                "EnablePaymentsToAccount", False
-            ),
+            "xeroAccountId": account_data.AccountID,
+            "xeroName": account_data.Name,
+            "xeroCode": account_data.Code,
+            "type": account_data.Type or "BANK",
+            "status": getattr(account_data, "Status", "ACTIVE"),
+            "bankAccountNumber": account_data.BankAccountNumber,
+            "currencyCode": account_data.CurrencyCode or "AUD",
+            "enablePaymentsToAccount": account_data.EnablePaymentsToAccount or False,
         }
 
-    def _map_account_update_data(self, account_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _map_account_update_data(self, account_data: Any) -> BankAccountUpdateInput:
         """Map provider account data to database update format."""
-        update_data: Dict[str, Any] = {}
+        update_data: dict[str, Any] = {}
 
-        if account_data.get("Name"):
-            update_data["xeroName"] = account_data["Name"]
-        if account_data.get("Status"):
-            update_data["status"] = account_data["Status"]
-        if account_data.get("EnablePaymentsToAccount") is not None:
-            update_data["enablePaymentsToAccount"] = account_data[
-                "EnablePaymentsToAccount"
-            ]
+        if account_data.Name:
+            update_data["xeroName"] = account_data.Name
+        if hasattr(account_data, "Status") and account_data.Status:
+            update_data["status"] = account_data.Status
+        if account_data.EnablePaymentsToAccount is not None:
+            update_data["enablePaymentsToAccount"] = (
+                account_data.EnablePaymentsToAccount
+            )
 
-        return update_data
+        return cast(BankAccountUpdateInput, update_data)

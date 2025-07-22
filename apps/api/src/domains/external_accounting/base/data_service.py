@@ -1,10 +1,21 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Generic, List, TypeVar
 
 from prisma import Prisma
 
+from .types import BaseAccountFilters, BaseInvoiceFilters
 
-class BaseIntegrationDataService(ABC):
+# Generic type variables for provider-specific data types
+InvoiceType = TypeVar("InvoiceType")
+AccountType = TypeVar("AccountType")
+PaymentType = TypeVar("PaymentType")
+AttachmentType = TypeVar("AttachmentType")
+PaymentDataType = TypeVar("PaymentDataType")
+
+
+class BaseIntegrationDataService(
+    ABC, Generic[InvoiceType, AccountType, PaymentType, AttachmentType, PaymentDataType]
+):
     """Handles all data operations for an integration provider."""
 
     def __init__(self, db: Prisma):
@@ -12,8 +23,8 @@ class BaseIntegrationDataService(ABC):
 
     @abstractmethod
     async def get_invoices(
-        self, org_id: str, filters: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, org_id: str, filters: BaseInvoiceFilters
+    ) -> List[InvoiceType]:
         """
         Get invoices from provider.
 
@@ -22,14 +33,14 @@ class BaseIntegrationDataService(ABC):
             filters: Provider-specific filters (status, date_from, date_to, etc.)
 
         Returns:
-            List of invoice dictionaries from the provider
+            List of typed invoice objects from the provider
         """
         pass
 
     @abstractmethod
     async def get_accounts(
-        self, org_id: str, filters: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, org_id: str, filters: BaseAccountFilters
+    ) -> List[AccountType]:
         """
         Get accounts from provider.
 
@@ -38,14 +49,14 @@ class BaseIntegrationDataService(ABC):
             filters: Provider-specific filters (type, etc.)
 
         Returns:
-            List of account dictionaries from the provider
+            List of typed account objects from the provider
         """
         pass
 
     @abstractmethod
     async def create_payment(
-        self, org_id: str, payment_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, org_id: str, payment_data: PaymentDataType
+    ) -> PaymentType:
         """
         Post payment to provider.
 
@@ -54,7 +65,7 @@ class BaseIntegrationDataService(ABC):
             payment_data: Payment details to create
 
         Returns:
-            Created payment details from provider
+            Created payment object from provider
         """
         pass
 
@@ -66,7 +77,7 @@ class BaseIntegrationDataService(ABC):
         entity_type: str,
         file_data: bytes,
         filename: str,
-    ) -> Dict[str, Any]:
+    ) -> AttachmentType:
         """
         Upload attachment to provider.
 
@@ -78,6 +89,6 @@ class BaseIntegrationDataService(ABC):
             filename: Name of the file
 
         Returns:
-            Upload result from provider
+            Uploaded attachment object from provider
         """
         pass

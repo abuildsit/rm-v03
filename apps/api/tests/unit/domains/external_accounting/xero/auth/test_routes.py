@@ -132,7 +132,9 @@ class TestXeroRoutes:
         # Verify routes exist and have proper decorators
         route_paths = [route.path for route in router.routes]
 
-        assert "/external-accounting/auth/xero/{org_id}" in route_paths  # POST, GET, PATCH
+        assert (
+            "/external-accounting/auth/xero/{org_id}" in route_paths
+        )  # POST, GET, PATCH
         assert "/external-accounting/auth/xero/callback" in route_paths  # GET
 
         # Note: Actual permission testing is handled by the shared permissions tests

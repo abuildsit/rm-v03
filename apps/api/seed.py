@@ -19,27 +19,27 @@ sys.path.append(str(project_root))
 
 
 async def setup_storage_bucket(supabase: Client):
-    """Create and configure the remittance-files storage bucket"""
+    """Create and configure the remittances storage bucket"""
     print("🗂️ Setting up storage bucket...")
 
     try:
         # Check if bucket exists
         buckets = supabase.storage.list_buckets()
-        bucket_exists = any(bucket.name == "remittance-files" for bucket in buckets)
+        bucket_exists = any(bucket.name == "remittances" for bucket in buckets)
 
         if not bucket_exists:
             # Create the bucket
             supabase.storage.create_bucket(
-                "remittance-files",
+                "remittances",
                 options={
                     "public": False,
                     "file_size_limit": 52428800,  # 50MB
                     "allowed_mime_types": ["application/pdf"],
                 },
             )
-            print("✅ Created storage bucket: remittance-files")
+            print("✅ Created storage bucket: remittances")
         else:
-            print("ℹ️ Storage bucket already exists: remittance-files")
+            print("ℹ️ Storage bucket already exists: remittances")
 
     except Exception as e:
         print(f"❌ Storage bucket setup failed: {e}")
@@ -55,8 +55,8 @@ async def main():
 
     # Initialize Supabase client
     supabase: Client | None = (
-        create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-        if settings.SUPABASE_URL and settings.SUPABASE_KEY
+        create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
+        if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY
         else None
     )
 

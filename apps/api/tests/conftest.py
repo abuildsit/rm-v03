@@ -18,6 +18,7 @@ from src.main import app
 
 # Import fixtures from fixture modules
 from tests.fixtures.organization_fixtures import *  # noqa: F403, F401
+from tests.fixtures.remittance_fixtures import *  # noqa: F403, F401
 from tests.fixtures.xero_fixtures import *  # noqa: F403, F401
 
 # Set test environment variables
@@ -170,6 +171,54 @@ def mock_organization_member() -> Mock:
     member.profileId = "test-profile-id-123"
     member.organizationId = "42f929b1-8fdb-45b1-a7cf-34fae2314561"
     member.role = OrganizationRole.admin
+    member.status = MemberStatus.active
+    return member
+
+
+@pytest.fixture
+def mock_organization_member_owner() -> Mock:
+    """Mock OrganizationMember with owner role for testing."""
+    member = Mock(spec=OrganizationMember)
+    member.id = "test-owner-member-id"
+    member.profileId = "test-profile-id-123"
+    member.organizationId = "42f929b1-8fdb-45b1-a7cf-34fae2314561"
+    member.role = OrganizationRole.owner
+    member.status = MemberStatus.active
+    return member
+
+
+@pytest.fixture
+def mock_organization_member_admin() -> Mock:
+    """Mock OrganizationMember with admin role for testing."""
+    member = Mock(spec=OrganizationMember)
+    member.id = "test-admin-member-id"
+    member.profileId = "test-profile-id-123"
+    member.organizationId = "42f929b1-8fdb-45b1-a7cf-34fae2314561"
+    member.role = OrganizationRole.admin
+    member.status = MemberStatus.active
+    return member
+
+
+@pytest.fixture
+def mock_organization_member_auditor() -> Mock:
+    """Mock OrganizationMember with auditor role for testing."""
+    member = Mock(spec=OrganizationMember)
+    member.id = "test-auditor-member-id"
+    member.profileId = "test-profile-id-123"
+    member.organizationId = "42f929b1-8fdb-45b1-a7cf-34fae2314561"
+    member.role = OrganizationRole.auditor
+    member.status = MemberStatus.active
+    return member
+
+
+@pytest.fixture
+def mock_organization_member_user() -> Mock:
+    """Mock OrganizationMember with user role for testing."""
+    member = Mock(spec=OrganizationMember)
+    member.id = "test-user-member-id"
+    member.profileId = "test-profile-id-123"
+    member.organizationId = "42f929b1-8fdb-45b1-a7cf-34fae2314561"
+    member.role = OrganizationRole.user
     member.status = MemberStatus.active
     return member
 

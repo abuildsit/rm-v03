@@ -33,6 +33,12 @@ class Permission(Enum):
     # Payment permissions (for future use)
     CREATE_PAYMENTS = "create_payments"  # Create payments in accounting system
 
+    # Remittance permissions
+    VIEW_REMITTANCES = "view_remittances"  # View remittance list and details
+    CREATE_REMITTANCES = "create_remittances"  # Upload new remittances
+    MANAGE_REMITTANCES = "manage_remittances"  # Update remittance details
+    APPROVE_REMITTANCES = "approve_remittances"  # Approve remittance matches
+
 
 ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
     OrganizationRole.owner: {
@@ -48,6 +54,10 @@ ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
         Permission.VIEW_INVOICES,
         Permission.SYNC_INVOICES,
         Permission.CREATE_PAYMENTS,
+        Permission.VIEW_REMITTANCES,
+        Permission.CREATE_REMITTANCES,
+        Permission.MANAGE_REMITTANCES,
+        Permission.APPROVE_REMITTANCES,
     },
     OrganizationRole.admin: {
         # Admins have everything except billing management
@@ -61,6 +71,10 @@ ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
         Permission.VIEW_INVOICES,
         Permission.SYNC_INVOICES,
         Permission.CREATE_PAYMENTS,
+        Permission.VIEW_REMITTANCES,
+        Permission.CREATE_REMITTANCES,
+        Permission.MANAGE_REMITTANCES,
+        Permission.APPROVE_REMITTANCES,
     },
     OrganizationRole.auditor: {
         # Auditors have read-only access
@@ -68,9 +82,12 @@ ROLE_PERMISSIONS: dict[OrganizationRole, Set[Permission]] = {
         Permission.VIEW_BANK_ACCOUNTS,
         Permission.VIEW_INTEGRATIONS,
         Permission.VIEW_INVOICES,
+        Permission.VIEW_REMITTANCES,
     },
     OrganizationRole.user: {
-        # Basic users can view bank accounts for transparency
+        # Basic users can view bank accounts and basic remittance operations
         Permission.VIEW_BANK_ACCOUNTS,
+        Permission.VIEW_REMITTANCES,
+        Permission.CREATE_REMITTANCES,
     },
 }

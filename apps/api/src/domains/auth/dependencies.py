@@ -1,6 +1,4 @@
 # apps/api/src/domains/auth/dependencies.py
-from typing import Any
-
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 from jwt import PyJWKClient
@@ -11,12 +9,14 @@ from src.core.database import get_db
 from src.core.settings import settings
 from src.shared.exceptions import UnlinkedProfileError
 
+from .types import SupabaseJwtPayload
+
 JWKS_URL = f"{settings.SUPABASE_URL}/auth/v1/jwks" if settings.SUPABASE_URL else None
 
 _jwks_client = PyJWKClient(JWKS_URL) if JWKS_URL else None
 
 
-def decode_supabase_jwt(token: str) -> dict[str, Any]:
+def decode_supabase_jwt(token: str) -> SupabaseJwtPayload:
     """
     Verifies JWT token. Uses JWT_SECRET for development mode if available,
     otherwise falls back to Supabase JWKS for production.
@@ -30,7 +30,7 @@ def decode_supabase_jwt(token: str) -> dict[str, Any]:
                 algorithms=["HS256"],
                 options={"verify_aud": False},
             )
-            return dict(payload)
+            return SupabaseJwtPayload(**dict(payload))
         except jwt.PyJWTError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,9 +51,8 @@ def decode_supabase_jwt(token: str) -> dict[str, Any]:
             algorithms=["RS256"],
             options={"verify_aud": False},
         )
-        # jwt.decode returns dict[str, Any] but MyPy sees it as Any
-        # Cast to satisfy type checker while maintaining runtime safety
-        return dict(payload)
+        # Create typed Pydantic model for JWT payload
+        return SupabaseJwtPayload(**dict(payload))
     except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -73,7 +72,7 @@ def get_auth_id(authorization: str = Header(None)) -> str:
 
     token = authorization.split(" ")[1]
     payload = decode_supabase_jwt(token)
-    return payload.get("sub") or ""
+    return payload.sub or ""
 
 
 async def get_current_profile(

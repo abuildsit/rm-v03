@@ -14,6 +14,8 @@ make lint      # Run black, isort, flake8, and mypy
 make format    # Run black and isort formatting only  
 make check     # Run mypy type checking
 make test      # Run pytest test suite
+make security  # Run security scanning with bandit
+make ci        # Full CI pipeline: generate Prisma client, lint, test
 ```
 
 ### Database Operations
