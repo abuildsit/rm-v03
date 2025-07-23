@@ -24,6 +24,14 @@ class Settings(BaseSettings):
         "accounting.settings offline_access"
     )
 
+    # OpenAI configuration
+    OPENAI_API_KEY: str | None = None
+    OPENAI_ASSISTANT_ID: str | None = None  # Optional, can create dynamically
+    OPENAI_MODEL: str = "gpt-4-turbo-preview"
+    OPENAI_MAX_TOKENS: int = 4000
+    OPENAI_TIMEOUT: int = 300  # 5 minutes
+    OPENAI_MAX_RETRIES: int = 3
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

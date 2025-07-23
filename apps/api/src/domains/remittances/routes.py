@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile, status
 from prisma.models import OrganizationMember
 
 from prisma import Prisma
@@ -33,6 +33,7 @@ router = APIRouter(prefix="/remittances", tags=["Remittances"])
 )
 async def upload_remittance(
     org_id: str,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="PDF file to upload"),
     membership: OrganizationMember = Depends(
         require_permission(Permission.CREATE_REMITTANCES)
@@ -46,7 +47,11 @@ async def upload_remittance(
     Only PDF files up to 10MB are allowed.
     """
     remittance = await create_remittance(
-        db=db, org_id=org_id, user_id=membership.profileId or "", file=file
+        db=db,
+        org_id=org_id,
+        user_id=membership.profileId or "",
+        file=file,
+        background_tasks=background_tasks,
     )
 
     return FileUploadResponse(

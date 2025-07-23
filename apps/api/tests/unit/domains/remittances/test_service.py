@@ -26,7 +26,7 @@ from src.domains.remittances.service import (
     get_remittance_by_id,
     get_remittances_by_organization,
     update_remittance,
-    upload_file_to_storage,
+    upload_file_to_storage_with_content,
     validate_file,
 )
 
@@ -90,7 +90,9 @@ class TestFileUpload:
 
     @pytest.mark.asyncio
     @patch("src.domains.remittances.service.supabase")
-    async def test_upload_file_to_storage_success(self, mock_supabase, mock_pdf_file):
+    async def test_upload_file_to_storage_with_content_success(
+        self, mock_supabase, mock_pdf_file
+    ):
         """Test successful file upload to storage."""
         # Mock Supabase response
         mock_response = Mock()
@@ -98,14 +100,18 @@ class TestFileUpload:
         mock_supabase.storage.from_.return_value.upload.return_value = mock_response
 
         file_path = "test-org/2024/01/test-uuid"
-        result = await upload_file_to_storage(mock_pdf_file, file_path, "test-org")
+        result = await upload_file_to_storage_with_content(
+            b"pdf content", file_path, "application/pdf"
+        )
 
         assert result == file_path
         mock_supabase.storage.from_.assert_called_with("remittances")
 
     @pytest.mark.asyncio
     @patch("src.domains.remittances.service.supabase")
-    async def test_upload_file_to_storage_error(self, mock_supabase, mock_pdf_file):
+    async def test_upload_file_to_storage_with_content_error(
+        self, mock_supabase, mock_pdf_file
+    ):
         """Test file upload error handling."""
         # Mock Supabase error
         mock_response = Mock()
@@ -114,7 +120,9 @@ class TestFileUpload:
         mock_supabase.storage.from_.return_value.upload.return_value = mock_response
 
         with pytest.raises(HTTPException) as exc_info:
-            await upload_file_to_storage(mock_pdf_file, "test-path", "test-org")
+            await upload_file_to_storage_with_content(
+                b"pdf content", "test-path", "application/pdf"
+            )
 
         assert exc_info.value.status_code == 500
         assert "Failed to upload file" in str(exc_info.value.detail)
@@ -124,7 +132,7 @@ class TestCreateRemittance:
     """Test remittance creation."""
 
     @pytest.mark.asyncio
-    @patch("src.domains.remittances.service.upload_file_to_storage")
+    @patch("src.domains.remittances.service.upload_file_to_storage_with_content")
     @patch("src.domains.remittances.service.generate_file_path")
     async def test_create_remittance_success(
         self,
@@ -145,8 +153,17 @@ class TestCreateRemittance:
         mock_prisma.remittance.create = AsyncMock(return_value=mock_remittance_uploaded)
         mock_prisma.auditlog.create = AsyncMock()
 
+        # Mock background tasks
+        from fastapi import BackgroundTasks
+
+        background_tasks = BackgroundTasks()
+
         result = await create_remittance(
-            mock_prisma, "test-org-123", "test-user-123", mock_pdf_file
+            mock_prisma,
+            "test-org-123",
+            "test-user-123",
+            mock_pdf_file,
+            background_tasks,
         )
 
         assert isinstance(result, RemittanceResponse)
@@ -157,7 +174,7 @@ class TestCreateRemittance:
         mock_prisma.auditlog.create.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("src.domains.remittances.service.upload_file_to_storage")
+    @patch("src.domains.remittances.service.upload_file_to_storage_with_content")
     @patch("src.domains.remittances.service.generate_file_path")
     @patch("src.domains.remittances.service.supabase")
     async def test_create_remittance_db_error_cleanup(
@@ -174,9 +191,18 @@ class TestCreateRemittance:
         # Mock supabase cleanup
         mock_supabase.storage.from_.return_value.remove.return_value = None
 
+        # Mock background tasks
+        from fastapi import BackgroundTasks
+
+        background_tasks = BackgroundTasks()
+
         with pytest.raises(HTTPException) as exc_info:
             await create_remittance(
-                mock_prisma, "test-org-123", "test-user-123", mock_pdf_file
+                mock_prisma,
+                "test-org-123",
+                "test-user-123",
+                mock_pdf_file,
+                background_tasks,
             )
 
         assert exc_info.value.status_code == 500

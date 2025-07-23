@@ -1,14 +1,19 @@
+import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from prisma.enums import AuditAction, AuditOutcome, RemittanceStatus
 from prisma.types import RemittanceUpdateInput, RemittanceWhereInput
 from supabase import create_client
 
-from prisma import Prisma
+from prisma import Json, Prisma
 from src.core.settings import settings
+
+# storage_service import removed - using existing supabase client
+from src.domains.remittances.ai_extraction import AIExtractionService
+from src.domains.remittances.matching import MatchingService
 from src.domains.remittances.models import (
     FileUrlResponse,
     RemittanceDetailResponse,
@@ -16,6 +21,8 @@ from src.domains.remittances.models import (
     RemittanceResponse,
     RemittanceUpdateRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 # Initialize Supabase client
 supabase = create_client(
@@ -52,26 +59,30 @@ def generate_file_path(org_id: str) -> tuple[str, str]:
     return file_path, unique_id
 
 
-async def upload_file_to_storage(file: UploadFile, file_path: str, org_id: str) -> str:
-    """Upload file to Supabase Storage and return the stored path."""
+async def upload_file_to_storage_with_content(
+    file_content: bytes, file_path: str, content_type: str | None
+) -> str:
+    """Upload file content to Supabase Storage and return the stored path."""
     try:
-        # Read file content
-        file_content = await file.read()
-
         # Upload to Supabase Storage
         response = supabase.storage.from_(BUCKET_NAME).upload(
             path=file_path,
             file=file_content,
             file_options={
-                "content-type": file.content_type or "application/pdf",
+                "content-type": content_type or "application/pdf",
                 "cache-control": "3600",
             },
         )
 
-        if response.error:
+        if hasattr(response, "error") and response.error:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to upload file: {response.error.message}",
+            )
+        elif isinstance(response, dict) and response.get("error"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to upload file: {response['error']['message']}",
             )
 
         return file_path
@@ -84,7 +95,11 @@ async def upload_file_to_storage(file: UploadFile, file_path: str, org_id: str) 
 
 
 async def create_remittance(
-    db: Prisma, org_id: str, user_id: str, file: UploadFile
+    db: Prisma,
+    org_id: str,
+    user_id: str,
+    file: UploadFile,
+    background_tasks: BackgroundTasks,
 ) -> RemittanceResponse:
     """Create a new remittance record with file upload."""
     # Validate file
@@ -93,10 +108,16 @@ async def create_remittance(
     # Generate file path
     file_path, unique_id = generate_file_path(org_id)
 
+    # Read file content once for both upload and processing
+    file_content = await file.read()
+
     # Upload file to storage
-    stored_path = await upload_file_to_storage(file, file_path, org_id)
+    stored_path = await upload_file_to_storage_with_content(
+        file_content, file_path, file.content_type
+    )
 
     try:
+
         # Create remittance record
         remittance = await db.remittance.create(
             data={
@@ -119,6 +140,19 @@ async def create_remittance(
             }
         )
 
+        # Start background processing
+        print(f"🎯 Adding background task for remittance {remittance.id}")
+        print(f"📄 File content length: {len(file_content)} bytes")
+        background_tasks.add_task(
+            process_remittance_background,
+            db,
+            remittance.id,
+            file_content,
+            org_id,
+            user_id,
+        )
+        print("✅ Background task added to queue")
+
         return RemittanceResponse.model_validate(remittance)
 
     except Exception as e:
@@ -139,14 +173,14 @@ async def get_remittances_by_organization(
     org_id: str,
     page: int = 1,
     page_size: int = 50,
-    status_filter: Optional[str] = None,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    search: Optional[str] = None,
+    status_filter: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    search: str | None = None,
 ) -> RemittanceListResponse:
     """Get paginated list of remittances with optional filtering."""
     # Build where clause
-    where_clause: Dict[str, Any] = {"organizationId": org_id}
+    where_clause: dict[str, Any] = {"organizationId": org_id}
 
     if status_filter:
         try:
@@ -172,7 +206,11 @@ async def get_remittances_by_organization(
         try:
             to_date = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
             if "createdAt" in where_clause:
-                where_clause["createdAt"].update({"lte": to_date})
+                existing_filter = where_clause["createdAt"]
+                if isinstance(existing_filter, dict):
+                    existing_filter.update({"lte": to_date})
+                else:
+                    where_clause["createdAt"] = {"lte": to_date}
             else:
                 where_clause["createdAt"] = {"lte": to_date}
         except ValueError:
@@ -334,4 +372,354 @@ async def get_file_url(db: Prisma, org_id: str, remittance_id: str) -> FileUrlRe
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate file URL: {str(e)}",
+        )
+
+
+async def process_remittance_background(
+    db: Prisma, remittance_id: str, file_content: bytes, org_id: str, user_id: str
+) -> None:
+    """
+    Background task to process remittance: extract data and match invoices.
+    """
+    # Write directly to stderr to ensure visibility
+    import sys
+
+    print(
+        f"🚀 BACKGROUND TASK STARTED for remittance {remittance_id}",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(
+        f"📊 File content size: {len(file_content)} bytes", file=sys.stderr, flush=True
+    )
+
+    # Also update status immediately to confirm task is running
+    await db.remittance.update(
+        where={"id": remittance_id}, data={"status": RemittanceStatus.Processing}
+    )
+    print(
+        f"✅ Updated status to Processing for {remittance_id}",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    try:
+        logger.info(f"Starting background processing for remittance {remittance_id}")
+
+        print("🔧 Initializing AI extraction service...", file=sys.stderr, flush=True)
+        # Initialize services
+        ai_service = AIExtractionService()
+        print("✅ AI service initialized", file=sys.stderr, flush=True)
+
+        print("🔧 Initializing matching service...", file=sys.stderr, flush=True)
+        matching_service = MatchingService(db)
+        print("✅ Matching service initialized", file=sys.stderr, flush=True)
+
+        from uuid import UUID
+
+        print("🤖 Starting AI extraction from PDF...", file=sys.stderr, flush=True)
+
+        # Create AI client instance to check for thread ID after creation
+        from src.shared.ai import openai_client
+
+        try:
+            # Extract data using AI
+            extracted_data = await ai_service.extract_from_pdf(
+                pdf_content=file_content, organization_id=UUID(org_id)
+            )
+
+            # Check if we have a thread ID from the client and save it immediately
+            current_thread_id = (
+                openai_client.get_current_thread_id()
+                if openai_client
+                else extracted_data.thread_id
+            )
+            if current_thread_id:
+                print(
+                    f"💾 Saving thread ID {current_thread_id} for debugging",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                await db.remittance.update(
+                    where={"id": remittance_id},
+                    data={"openaiThreadId": current_thread_id},
+                )
+                print(
+                    f"✅ Thread ID {current_thread_id} saved to database",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+            print(
+                "🎉 AI extraction completed successfully!", file=sys.stderr, flush=True
+            )
+        except Exception as ai_error:
+            # Try to save thread ID even if extraction fails
+            current_thread_id = (
+                openai_client.get_current_thread_id() if openai_client else None
+            )
+            if current_thread_id:
+                print(
+                    f"💾 Saving thread ID {current_thread_id} despite extraction failure",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                await db.remittance.update(
+                    where={"id": remittance_id},
+                    data={"openaiThreadId": current_thread_id},
+                )
+                print(
+                    f"✅ Thread ID {current_thread_id} saved for debugging",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+            # Re-raise the original error
+            raise ai_error
+
+        # Store the raw JSON output for debugging and auditing
+        import json
+
+        raw_json_string = json.dumps(
+            extracted_data.model_dump(mode="json"), default=str, indent=2
+        )
+
+        # Update remittance with basic extracted data
+        await db.remittance.update(
+            where={"id": remittance_id},
+            data={
+                "status": RemittanceStatus.Data_Retrieved,
+                "totalAmount": extracted_data.total_amount,
+                "paymentDate": datetime.combine(
+                    extracted_data.payment_date, datetime.min.time(), timezone.utc
+                ),
+                "reference": extracted_data.payment_reference,
+                "confidenceScore": extracted_data.confidence,
+                # Thread ID already saved above, but include here as backup
+                "openaiThreadId": extracted_data.thread_id,
+                # Store raw extracted JSON for debugging
+                "extractedRawJson": cast(Json, raw_json_string),
+            },
+        )
+
+        print(
+            f"✅ Remittance {remittance_id} updated with extracted data",
+            file=sys.stderr,
+            flush=True,
+        )
+
+        # Create remittance lines from extracted payment data
+        print(
+            f"📝 Creating {len(extracted_data.payments)} remittance lines...",
+            file=sys.stderr,
+            flush=True,
+        )
+
+        for payment in extracted_data.payments:
+            line_data = {
+                "remittanceId": remittance_id,
+                "invoiceNumber": payment.invoice_number,
+                "aiPaidAmount": payment.paid_amount,
+                # Initialize matching fields as None - will be set during invoice matching
+                "aiInvoiceId": None,
+                "overrideInvoiceId": None,
+                "matchConfidence": None,
+                "matchType": None,
+            }
+
+            try:
+                await db.remittanceline.create(data=line_data)
+                print(
+                    f"✅ Created line for invoice {payment.invoice_number} "
+                    f"with amount {payment.paid_amount}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            except Exception as line_error:
+                print(
+                    f"❌ Failed to create line for invoice "
+                    f"{payment.invoice_number}: {line_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                # Log the error but continue with other lines
+                logger.warning(
+                    f"Failed to create remittance line for invoice "
+                    f"{payment.invoice_number}: {line_error}"
+                )
+
+        print(
+            f"✅ Completed remittance line creation for {remittance_id}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+        # Start invoice matching process
+        print(
+            f"🔍 Starting invoice matching for {len(extracted_data.payments)} lines...",
+            file=sys.stderr,
+            flush=True,
+        )
+
+        try:
+            # Get the created remittance lines to match them
+            created_lines = await db.remittanceline.find_many(
+                where={"remittanceId": remittance_id}, order={"createdAt": "asc"}
+            )
+
+            print(
+                f"📋 Found {len(created_lines)} lines to match",
+                file=sys.stderr,
+                flush=True,
+            )
+
+            # Process each line for matching
+            matched_count = 0
+            for i, line in enumerate(created_lines, 1):
+                print(
+                    f"🎯 Matching line {i}/{len(created_lines)}: "
+                    f"Invoice {line.invoiceNumber} (${line.aiPaidAmount})",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
+                try:
+                    # Create ExtractedPayment for the matching service
+                    from src.domains.remittances.types import ExtractedPayment
+
+                    payment = ExtractedPayment(
+                        invoice_number=line.invoiceNumber, paid_amount=line.aiPaidAmount
+                    )
+
+                    # Use matching service to find matches
+                    match_results, _ = (
+                        await matching_service.match_payments_to_invoices(
+                            payments=[payment],
+                            organization_id=UUID(org_id),
+                            remittance_id=UUID(remittance_id),
+                        )
+                    )
+
+                    if match_results and len(match_results) > 0:
+                        match = match_results[0]
+                        print(
+                            f"  ✅ MATCH FOUND: {line.invoiceNumber} → "
+                            f"{match.match_type.value if match.match_type else 'unknown'} "
+                            f"match (confidence: {match.match_confidence})",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+
+                        # Update the remittance line with match data
+                        await db.remittanceline.update(
+                            where={"id": line.id},
+                            data={
+                                "aiInvoiceId": (
+                                    str(match.matched_invoice_id)
+                                    if match.matched_invoice_id
+                                    else None
+                                ),
+                                "matchConfidence": match.match_confidence,
+                                "matchType": (
+                                    match.match_type.value if match.match_type else None
+                                ),
+                            },
+                        )
+                        matched_count += 1
+                        print(
+                            f"  💾 Updated line with match data",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"  ❌ NO MATCH: {line.invoiceNumber}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+
+                except Exception as match_error:
+                    print(
+                        f"  ⚠️ Matching failed for {line.invoiceNumber}: {match_error}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    logger.warning(
+                        f"Invoice matching failed for line {line.id}: {match_error}"
+                    )
+
+            # Update remittance status based on matching results
+            match_percentage = (
+                (matched_count / len(created_lines)) * 100 if created_lines else 0
+            )
+
+            print(
+                f"📊 Matching complete: {matched_count}/{len(created_lines)} "
+                f"lines matched ({match_percentage:.1f}%)",
+                file=sys.stderr,
+                flush=True,
+            )
+
+            # Determine final status based on match percentage
+            if match_percentage == 100:
+                final_status = RemittanceStatus.Awaiting_Approval
+                status_msg = "All lines matched - awaiting approval"
+            elif match_percentage > 0:
+                final_status = RemittanceStatus.Partially_Matched
+                status_msg = f"Partially matched ({match_percentage:.1f}%)"
+            else:
+                final_status = RemittanceStatus.Unmatched
+                status_msg = "No matches found"
+
+            # Update remittance with final status
+            await db.remittance.update(
+                where={"id": remittance_id}, data={"status": final_status}
+            )
+
+            print(
+                f"🎉 Final status: {final_status.value} - {status_msg}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        except Exception as matching_error:
+            print(
+                f"❌ Invoice matching process failed: {matching_error}",
+                file=sys.stderr,
+                flush=True,
+            )
+            logger.error(
+                f"Invoice matching failed for remittance {remittance_id}: {matching_error}"
+            )
+
+            # Set status to manual review if matching fails
+            await db.remittance.update(
+                where={"id": remittance_id},
+                data={"status": RemittanceStatus.Manual_Review},
+            )
+
+        logger.info(
+            f"Completed processing remittance {remittance_id} with thread ID tracking"
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Background processing failed for remittance {remittance_id}: {e}"
+        )
+
+        # Update status to failed
+        await db.remittance.update(
+            where={"id": remittance_id}, data={"status": RemittanceStatus.File_Error}
+        )
+
+        # Create error audit log
+        await db.auditlog.create(
+            data={
+                "remittanceId": remittance_id,
+                "userId": user_id,
+                "organizationId": org_id,
+                "action": AuditAction.sync_attempt,
+                "outcome": AuditOutcome.error,
+                "errorMessage": str(e),
+            }
         )

@@ -16,6 +16,8 @@ make check     # Run mypy type checking
 make test      # Run pytest test suite
 make security  # Run security scanning with bandit
 make ci        # Full CI pipeline: generate Prisma client, lint, test
+make dev       # Run development server in new terminal with timestamped logs (clears server.log)
+make dev keep-log  # Run development server preserving existing logs (appends to server.log)
 ```
 
 ### Database Operations
@@ -147,11 +149,20 @@ async def get_resource(
 - All datetime operations must use timezone-aware objects (datetime.now(timezone.utc))
 - The system handles provider-specific date formats automatically
 
+### Development Server
+- `make dev` starts the server in a new terminal window on http://0.0.0.0:8001
+- All server output is logged to `server.log` with timestamps (YYYY-MM-DD HH:MM:SS format)
+- Use `make dev keep-log` to preserve existing logs when restarting
+- Server runs with auto-reload enabled for development
+
 ### Performance Considerations
 - Sync operations run asynchronously to avoid blocking API responses
 - Database upserts handle large datasets efficiently
 - Provider rate limits are respected automatically
 - Connection pooling via Prisma for optimal database performance
+
+### DX
+- After every implementations, run 'make ci' and report back to user on the outcome.
 
 ## External Accounting Integration Architecture
 
@@ -195,11 +206,6 @@ result = await orchestrator.sync_invoices(data_service, org_id, options)
 - **OAuth Integration**: Automatic initial sync triggered after successful connection
 - **Token Management**: Automatic token refresh with connection status tracking
 
-### Adding New Providers
-1. Implement `BaseIntegrationDataService` interface
-2. Add provider detection logic to `IntegrationFactory`
-3. All existing sync logic works automatically
-
 ## Testing Strategy
 
 - **Domain-focused testing**: Each domain has its own test suite in `tests/unit/domains/`
@@ -210,6 +216,7 @@ result = await orchestrator.sync_invoices(data_service, org_id, options)
 
 ### TYPE SAFETY FIRST ###
 - This is a type-safe first project.
+- Pydantic - not straight lists, etc from 'typing'
 - Type annotations are required (enforced by mypy strict mode)
 - NEVER use type ignore comments (# type: ignore) - always fix the underlying type issue properly
 - NEVER use Any type.

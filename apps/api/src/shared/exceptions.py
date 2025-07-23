@@ -2,6 +2,17 @@
 from fastapi import HTTPException, status
 
 
+# Base HTTP Exception for consistent error handling
+class BaseHTTPException(HTTPException):
+    """Base class for HTTP exceptions with consistent error handling."""
+
+    status_code: int = 500
+    message: str = "Internal server error"
+
+    def __init__(self, message: str | None = None) -> None:
+        super().__init__(status_code=self.status_code, detail=message or self.message)
+
+
 # Authentication & Authorization Exceptions
 class InvalidTokenError(HTTPException):
     def __init__(self) -> None:

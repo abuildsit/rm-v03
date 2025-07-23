@@ -125,61 +125,6 @@ src/
             └── confidence.py   # Confidence calculation
 ```
 
-### Database Schema
-
-```sql
--- New tables for remittance processing
-CREATE TABLE remittances (
-    id UUID PRIMARY KEY,
-    organization_id UUID NOT NULL REFERENCES organizations(id),
-    filename VARCHAR(255) NOT NULL,
-    file_url TEXT,
-    upload_date TIMESTAMP NOT NULL,
-    status VARCHAR(50) NOT NULL, -- uploaded, processing, extracted, matched, completed, failed
-    total_amount DECIMAL(15,2),
-    payment_date DATE,
-    payment_reference VARCHAR(255),
-    confidence_score DECIMAL(3,2),
-    extraction_data JSONB,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    created_by UUID REFERENCES users(id),
-    INDEX idx_org_status (organization_id, status),
-    INDEX idx_org_date (organization_id, upload_date DESC)
-);
-
-CREATE TABLE remittance_lines (
-    id UUID PRIMARY KEY,
-    remittance_id UUID NOT NULL REFERENCES remittances(id),
-    line_number INTEGER NOT NULL,
-    invoice_number VARCHAR(255) NOT NULL,
-    ai_paid_amount DECIMAL(15,2) NOT NULL,
-    ai_invoice_id UUID REFERENCES invoices(id),
-    override_invoice_id UUID REFERENCES invoices(id),
-    match_confidence DECIMAL(3,2),
-    match_type VARCHAR(20), -- exact, relaxed, numeric
-    notes TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    INDEX idx_remittance (remittance_id),
-    INDEX idx_invoice_match (ai_invoice_id, override_invoice_id)
-);
-
-CREATE TABLE matching_logs (
-    id UUID PRIMARY KEY,
-    remittance_id UUID NOT NULL REFERENCES remittances(id),
-    organization_id UUID NOT NULL,
-    total_lines INTEGER NOT NULL,
-    matched_count INTEGER NOT NULL,
-    match_percentage DECIMAL(5,2) NOT NULL,
-    processing_time_ms INTEGER NOT NULL,
-    exact_matches INTEGER DEFAULT 0,
-    relaxed_matches INTEGER DEFAULT 0,
-    numeric_matches INTEGER DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-```
-
 ## Feature Specifications
 
 ### 1. Document Upload & Processing

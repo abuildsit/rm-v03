@@ -262,6 +262,9 @@ model RemittanceLine {
   manualPaidAmount  Decimal?   @db.Decimal(15, 2)
   aiInvoiceId       String?    @db.Uuid
   overrideInvoiceId String?    @db.Uuid
+  matchConfidence   Decimal?   @db.Decimal(3, 2)
+  matchType         String?
+  notes             String?
   createdAt         DateTime?  @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime?  @default(now()) @db.Timestamptz(6)
   aiInvoice         Invoice?   @relation("RemittanceLineAiInvoice", fields: [aiInvoiceId], references: [id], onUpdate: NoAction)
@@ -280,6 +283,7 @@ model Remittance {
   reference        String?
   confidenceScore  Decimal?         @db.Decimal(3, 2)
   extractedRawJson Json?
+  openaiThreadId   String?
   xeroBatchId      String?
   createdAt        DateTime?        @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime?        @default(now()) @db.Timestamptz(6)
@@ -290,6 +294,7 @@ model Remittance {
   @@index([createdAt], map: "idx_remittances_created_at")
   @@index([organizationId], map: "idx_remittances_organization_id")
   @@index([status, organizationId], map: "idx_remittances_status_org")
+  @@index([openaiThreadId], map: "idx_remittances_openai_thread")
 }
 
 model XeroConnection {

@@ -36,12 +36,18 @@ class TestUploadRemittanceRoute:
         # Mock service response
         mock_create_remittance.return_value = mock_remittance_uploaded
 
+        # Mock background tasks
+        from fastapi import BackgroundTasks
+
+        background_tasks = BackgroundTasks()
+
         # Call route function directly
         result = await upload_remittance(
             org_id="test-org-123",
             file=mock_pdf_file,
             membership=mock_organization_member_admin,
             db=mock_prisma,
+            background_tasks=background_tasks,
         )
 
         # Verify result
@@ -56,6 +62,7 @@ class TestUploadRemittanceRoute:
             org_id="test-org-123",
             user_id=mock_organization_member_admin.profileId,
             file=mock_pdf_file,
+            background_tasks=background_tasks,
         )
 
     @pytest.mark.asyncio
@@ -96,6 +103,11 @@ class TestUploadRemittanceRoute:
             status_code=400, detail="Invalid file type"
         )
 
+        # Mock background tasks
+        from fastapi import BackgroundTasks
+
+        background_tasks = BackgroundTasks()
+
         # Verify that the exception is propagated
         with pytest.raises(HTTPException) as exc_info:
             await upload_remittance(
@@ -103,6 +115,7 @@ class TestUploadRemittanceRoute:
                 file=mock_invalid_file,
                 membership=mock_organization_member_admin,
                 db=mock_prisma,
+                background_tasks=background_tasks,
             )
 
         assert exc_info.value.status_code == 400

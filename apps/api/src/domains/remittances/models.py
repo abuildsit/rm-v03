@@ -13,6 +13,9 @@ class RemittanceLineResponse(BaseModel):
     manual_paid_amount: Optional[Decimal] = None
     ai_invoice_id: Optional[str] = None
     override_invoice_id: Optional[str] = None
+    match_confidence: Optional[Decimal] = None
+    match_type: Optional[str] = None
+    notes: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -21,19 +24,20 @@ class RemittanceLineResponse(BaseModel):
 
 class RemittanceResponse(BaseModel):
     id: str
-    organization_id: str
+    organization_id: str = Field(alias="organizationId")
     filename: str
-    file_path: Optional[str] = None
+    file_path: Optional[str] = Field(default=None, alias="filePath")
     status: RemittanceStatus
-    payment_date: Optional[datetime] = None
-    total_amount: Optional[Decimal] = None
+    payment_date: Optional[datetime] = Field(default=None, alias="paymentDate")
+    total_amount: Optional[Decimal] = Field(default=None, alias="totalAmount")
     reference: Optional[str] = None
-    confidence_score: Optional[Decimal] = None
-    xero_batch_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    confidence_score: Optional[Decimal] = Field(default=None, alias="confidenceScore")
+    openai_thread_id: Optional[str] = Field(default=None, alias="openaiThreadId")
+    xero_batch_id: Optional[str] = Field(default=None, alias="xeroBatchId")
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
+    updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class RemittanceDetailResponse(RemittanceResponse):
