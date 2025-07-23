@@ -10,6 +10,8 @@ from supabase import create_client
 
 from prisma import Json, Prisma
 from src.core.settings import settings
+from src.domains.external_accounting.base.factory import IntegrationFactory
+from src.domains.external_accounting.base.types import BatchPaymentData, PaymentItem
 
 # storage_service import removed - using existing supabase client
 from src.domains.remittances.ai_extraction import AIExtractionService
@@ -283,7 +285,19 @@ async def update_remittance(
             status_code=status.HTTP_404_NOT_FOUND, detail="Remittance not found"
         )
 
-    # Prepare update data
+    # Check if this is an approval action (status change to Exporting from
+    # Awaiting_Approval)
+    is_approval_action = (
+        "status" in update_data.model_dump(exclude_unset=True)
+        and update_data.status == RemittanceStatus.Exporting
+        and existing.status == RemittanceStatus.Awaiting_Approval
+    )
+
+    # If this is an approval action, use the dedicated approve_remittance function
+    if is_approval_action:
+        return await approve_remittance(db, org_id, user_id, remittance_id)
+
+    # Prepare update data for regular updates
     update_dict = {}
     for field, value in update_data.model_dump(exclude_unset=True).items():
         if field == "is_deleted" and value:
@@ -327,7 +341,7 @@ async def update_remittance(
                 "action": action,
                 "outcome": AuditOutcome.success,
                 "fieldChanged": "status",
-                "oldValue": existing.status.value,
+                "oldValue": existing.status,
                 "newValue": (
                     update_dict["status"].value
                     if isinstance(update_dict["status"], RemittanceStatus)
@@ -743,3 +757,252 @@ async def process_remittance_background(
                 "errorMessage": str(e),
             }
         )
+
+
+async def approve_remittance(
+    db: Prisma, org_id: str, user_id: str, remittance_id: str
+) -> RemittanceDetailResponse:
+    """
+    Approve a remittance and create batch payment in external accounting system.
+
+    Args:
+        db: Database instance
+        org_id: Organization ID
+        user_id: User ID performing the approval
+        remittance_id: Remittance ID to approve
+
+    Returns:
+        Updated remittance details
+
+    Raises:
+        HTTPException: If remittance not found, invalid status, or processing fails
+    """
+    # Get remittance with lines
+    remittance = await db.remittance.find_unique(
+        where={"id": remittance_id}, include={"lines": True}
+    )
+
+    if not remittance or remittance.organizationId != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Remittance not found"
+        )
+
+    # Check if remittance is in correct status for approval
+    if remittance.status != RemittanceStatus.Awaiting_Approval:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Remittance is not awaiting approval",
+        )
+
+    # Check if there are matched lines to process
+    if not remittance.lines:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No remittance lines found",
+        )
+
+    matched_lines = [
+        line
+        for line in remittance.lines
+        if line.aiInvoiceId is not None or line.overrideInvoiceId is not None
+    ]
+
+    if not matched_lines:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No matched lines found for payment",
+        )
+
+    # Get default bank account for the organization
+    bank_account = await db.bankaccount.find_first(
+        where={"organizationId": org_id, "isDefault": True}
+    )
+
+    if not bank_account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No default bank account configured",
+        )
+
+    # Create audit log for approval start
+    await db.auditlog.create(
+        data={
+            "remittanceId": remittance_id,
+            "userId": user_id,
+            "organizationId": org_id,
+            "action": AuditAction.approved,
+            "outcome": AuditOutcome.pending,
+            "reason": "Remittance approval started",
+        }
+    )
+
+    # Update status to Exporting
+    await db.remittance.update(
+        where={"id": remittance_id}, data={"status": RemittanceStatus.Exporting}
+    )
+
+    try:
+        # Get matched invoices for creating batch payment
+        invoice_ids = []
+        for line in matched_lines:
+            # Use override invoice if available, otherwise use AI match
+            invoice_id = line.overrideInvoiceId or line.aiInvoiceId
+            if invoice_id:
+                invoice_ids.append(invoice_id)
+
+        matched_invoices = await db.invoice.find_many(where={"id": {"in": invoice_ids}})
+
+        # Build batch payment data
+        batch_payment_data = _build_batch_payment_data(
+            remittance, bank_account, matched_invoices
+        )
+
+        # Get external accounting data service
+        factory = IntegrationFactory(db)
+        data_service = await factory.get_data_service(org_id)
+
+        # Create batch payment
+        result = await data_service.create_batch_payment(org_id, batch_payment_data)
+
+        if result.success:
+            # Update remittance with batch ID and success status
+            await db.remittance.update(
+                where={"id": remittance_id},
+                data={
+                    "status": RemittanceStatus.Exported_Unreconciled,
+                    "xeroBatchId": result.batch_id,
+                },
+            )
+
+            # Create success audit log
+            await db.auditlog.create(
+                data={
+                    "remittanceId": remittance_id,
+                    "userId": user_id,
+                    "organizationId": org_id,
+                    "action": AuditAction.exported,
+                    "outcome": AuditOutcome.success,
+                    "reason": f"Batch payment created with ID: {result.batch_id}",
+                }
+            )
+
+            logger.info(
+                f"Successfully approved remittance {remittance_id} with batch "
+                f"payment {result.batch_id}"
+            )
+
+        else:
+            # Update status to failed
+            await db.remittance.update(
+                where={"id": remittance_id},
+                data={"status": RemittanceStatus.Export_Failed, "xeroBatchId": None},
+            )
+
+            # Create failure audit log
+            await db.auditlog.create(
+                data={
+                    "remittanceId": remittance_id,
+                    "userId": user_id,
+                    "organizationId": org_id,
+                    "action": AuditAction.exported,
+                    "outcome": AuditOutcome.error,
+                    "errorMessage": result.error_message,
+                    "reason": "Batch payment creation failed",
+                }
+            )
+
+            logger.error(
+                f"Failed to create batch payment for remittance {remittance_id}: "
+                f"{result.error_message}"
+            )
+
+    except Exception as e:
+        # Update status to failed
+        await db.remittance.update(
+            where={"id": remittance_id}, data={"status": RemittanceStatus.Export_Failed}
+        )
+
+        # Create error audit log
+        await db.auditlog.create(
+            data={
+                "remittanceId": remittance_id,
+                "userId": user_id,
+                "organizationId": org_id,
+                "action": AuditAction.exported,
+                "outcome": AuditOutcome.error,
+                "errorMessage": str(e),
+                "reason": "Batch payment processing error",
+            }
+        )
+
+        logger.error(f"Error during remittance approval {remittance_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process batch payment: {str(e)}",
+        )
+
+    # Return updated remittance details
+    return await get_remittance_by_id(db, org_id, remittance_id)
+
+
+def _build_batch_payment_data(
+    remittance: Any, bank_account: Any, matched_invoices: list[Any]
+) -> BatchPaymentData:
+    """
+    Build batch payment data from remittance and matched invoices.
+
+    Args:
+        remittance: Remittance object with lines
+        bank_account: Bank account object
+        matched_invoices: List of matched invoice objects
+
+    Returns:
+        BatchPaymentData for external accounting system
+    """
+    # Create invoice lookup map for efficient matching
+    invoice_map = {invoice.id: invoice for invoice in matched_invoices}
+
+    # Build payment items from matched lines
+    payments = []
+
+    for line in remittance.lines:
+        # Use override invoice if available, otherwise use AI match
+        invoice_id = line.overrideInvoiceId or line.aiInvoiceId
+        if not invoice_id:
+            continue
+
+        # Get the matched invoice
+        invoice = invoice_map.get(invoice_id)
+        if not invoice:
+            logger.warning(
+                f"Invoice {invoice_id} not found for remittance line {line.id}"
+            )
+            continue
+
+        # Use the paid amount from the line
+        paid_amount = line.aiPaidAmount
+        if paid_amount is None:
+            logger.warning(f"No paid amount for remittance line {line.id}")
+            continue
+
+        # Create payment item
+        payment_item = PaymentItem(
+            invoice_id=invoice.invoiceId,  # Use Xero invoice ID
+            amount=paid_amount,
+            reference=f"RM: Payment for Invoice {line.invoiceNumber}",
+        )
+        payments.append(payment_item)
+
+    # Build batch payment data
+    return BatchPaymentData(
+        account_id=bank_account.xeroAccountId,
+        payment_date=(
+            remittance.paymentDate.strftime("%Y-%m-%d")
+            if remittance.paymentDate
+            else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        ),
+        payment_reference=(
+            f"RM: Batch Payment {remittance.reference or remittance.filename}"
+        ),
+        payments=payments,
+    )

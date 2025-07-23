@@ -3,7 +3,12 @@ from typing import Generic, List, TypeVar
 
 from prisma import Prisma
 
-from .types import BaseAccountFilters, BaseInvoiceFilters
+from .types import (
+    BaseAccountFilters,
+    BaseInvoiceFilters,
+    BatchPaymentData,
+    BatchPaymentResult,
+)
 
 # Generic type variables for provider-specific data types
 InvoiceType = TypeVar("InvoiceType")
@@ -90,5 +95,21 @@ class BaseIntegrationDataService(
 
         Returns:
             Uploaded attachment object from provider
+        """
+        pass
+
+    @abstractmethod
+    async def create_batch_payment(
+        self, org_id: str, batch_payment_data: BatchPaymentData
+    ) -> BatchPaymentResult:
+        """
+        Create batch payment in provider.
+
+        Args:
+            org_id: Organization ID
+            batch_payment_data: Batch payment details to create
+
+        Returns:
+            Result of batch payment creation with batch_id or error
         """
         pass

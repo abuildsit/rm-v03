@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # Xero API Filter Types
@@ -209,13 +209,101 @@ class HttpRequestKwargs(BaseModel):
 
     headers: Optional[HttpHeaders] = Field(None, description="Request headers")
     params: Optional[HttpParams] = Field(None, description="URL parameters")
-    json_data: Optional[Union["PaymentData", dict[str, str]]] = Field(
-        None, description="JSON payload"
-    )
+    # json_data removed - use explicit request models instead
     files: Optional[dict[str, tuple[str, bytes]]] = Field(
         None, description="File uploads"
     )
     timeout: Optional[float] = Field(None, description="Request timeout in seconds")
+
+
+# Batch Payment Types
+class XeroInvoiceRef(BaseModel):
+    """Reference to a Xero invoice for batch payments."""
+
+    InvoiceID: str = Field(..., description="Xero invoice identifier")
+
+
+class XeroAccountRef(BaseModel):
+    """Reference to a Xero account for batch payments."""
+
+    AccountID: str = Field(..., description="Xero account identifier")
+
+
+class XeroBatchPaymentPayment(BaseModel):
+    """Individual payment within a Xero batch payment."""
+
+    Invoice: XeroInvoiceRef = Field(..., description="Invoice reference with InvoiceID")
+    Amount: str = Field(..., description="Payment amount as string")
+    Reference: Optional[str] = Field(None, description="Payment reference")
+
+    @field_validator("Amount")
+    @classmethod
+    def validate_amount(cls, v: str) -> str:
+        """Validate amount is not empty."""
+        if not v.strip():
+            raise ValueError("Amount cannot be empty")
+        return v
+
+
+class XeroBatchPaymentItem(BaseModel):
+    """Individual batch payment response item."""
+
+    BatchPaymentID: str = Field(..., description="Xero batch payment identifier")
+    Account: Optional[XeroAccountRef] = Field(
+        None, description="Associated account reference"
+    )
+    Date: Optional[str] = Field(None, description="Payment date")
+    Reference: Optional[str] = Field(None, description="Payment reference")
+    Status: Optional[Literal["AUTHORISED", "DELETED"]] = Field(
+        None, description="Batch payment status"
+    )
+    TotalAmount: Optional[str] = Field(None, description="Total batch payment amount")
+    UpdatedDateUTC: Optional[str] = Field(None, description="Last updated date")
+
+
+class XeroBatchPaymentResponse(BaseModel):
+    """Response wrapper for batch payments endpoint."""
+
+    BatchPayments: List[XeroBatchPaymentItem] = Field(
+        ..., description="List of batch payments from Xero API"
+    )
+
+
+class XeroBatchPaymentRequest(BaseModel):
+    """Typed request structure for Xero batch payment API."""
+
+    Account: XeroAccountRef = Field(..., description="Bank account for payment")
+    Date: str = Field(..., description="Payment date in YYYY-MM-DD format")
+    Reference: str = Field(..., description="Batch payment reference")
+    Payments: List[XeroBatchPaymentPayment] = Field(..., description="List of payments")
+
+    @field_validator("Date")
+    @classmethod
+    def validate_date_format(cls, v: str) -> str:
+        """Validate date is in YYYY-MM-DD format."""
+        import re
+
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            raise ValueError("Date must be in YYYY-MM-DD format")
+        return v
+
+    @field_validator("Reference")
+    @classmethod
+    def validate_reference(cls, v: str) -> str:
+        """Validate reference is not empty."""
+        if not v.strip():
+            raise ValueError("Reference cannot be empty")
+        return v
+
+    @field_validator("Payments")
+    @classmethod
+    def validate_payments(
+        cls, v: List[XeroBatchPaymentPayment]
+    ) -> List[XeroBatchPaymentPayment]:
+        """Validate at least one payment is provided."""
+        if not v:
+            raise ValueError("At least one payment is required")
+        return v
 
 
 # Union types for API responses
@@ -224,4 +312,5 @@ XeroApiResponse = Union[
     XeroAccountsResponse,
     XeroPaymentsResponse,
     XeroAttachmentsResponse,
+    XeroBatchPaymentResponse,
 ]

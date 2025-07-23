@@ -17,6 +17,7 @@ from prisma import Prisma
 from src.main import app
 
 # Import fixtures from fixture modules
+from tests.fixtures.batch_payment_fixtures import *  # noqa: F403, F401
 from tests.fixtures.organization_fixtures import *  # noqa: F403, F401
 from tests.fixtures.remittance_fixtures import *  # noqa: F403, F401
 from tests.fixtures.xero_fixtures import *  # noqa: F403, F401

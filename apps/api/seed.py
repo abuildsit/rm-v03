@@ -506,7 +506,7 @@ async def main():
             {
                 "id": "ba1e4a2c-9f3d-4b8e-a7c6-5d9e8f1a2b3c",
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
-                "xeroAccountId": "12345678-1234-1234-1234-123456789012",
+                "xeroAccountId": "13918178849A48239A3157B7EAC713D7",
                 "xeroName": "Business Transaction Account",
                 "xeroCode": "090",
                 "type": "BANK",

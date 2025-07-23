@@ -8,18 +8,20 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class RemittanceLineResponse(BaseModel):
     id: str
-    invoice_number: str
-    ai_paid_amount: Optional[Decimal] = None
-    manual_paid_amount: Optional[Decimal] = None
-    ai_invoice_id: Optional[str] = None
-    override_invoice_id: Optional[str] = None
-    match_confidence: Optional[Decimal] = None
-    match_type: Optional[str] = None
+    invoice_number: str = Field(alias="invoiceNumber")
+    ai_paid_amount: Optional[Decimal] = Field(default=None, alias="aiPaidAmount")
+    manual_paid_amount: Optional[Decimal] = Field(
+        default=None, alias="manualPaidAmount"
+    )
+    ai_invoice_id: Optional[str] = Field(default=None, alias="aiInvoiceId")
+    override_invoice_id: Optional[str] = Field(default=None, alias="overrideInvoiceId")
+    match_confidence: Optional[Decimal] = Field(default=None, alias="matchConfidence")
+    match_type: Optional[str] = Field(default=None, alias="matchType")
     notes: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
+    updated_at: Optional[datetime] = Field(default=None, alias="updatedAt")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class RemittanceResponse(BaseModel):

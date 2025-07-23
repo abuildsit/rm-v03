@@ -30,6 +30,8 @@ from src.domains.remittances.service import (
     validate_file,
 )
 
+# Fixtures are passed as parameters to test methods
+
 
 class TestRemittanceValidation:
     """Test file validation functions."""
@@ -516,3 +518,315 @@ class TestGetFileUrl:
 
         assert exc_info.value.status_code == 500
         assert "Failed to generate file URL" in str(exc_info.value.detail)
+
+
+class TestApproveRemittance:
+    """Test remittance approval functionality with batch payment creation."""
+
+    @pytest.mark.asyncio
+    @patch("src.domains.remittances.service.IntegrationFactory")
+    async def test_approve_remittance_success(
+        self,
+        mock_factory,
+        mock_prisma,
+        mock_remittance_ready_for_approval,
+        mock_bank_account,
+        mock_matched_invoices,
+    ):
+        """Test successful remittance approval with batch payment creation."""
+        from prisma.enums import RemittanceStatus
+
+        from src.domains.external_accounting.base.types import BatchPaymentResult
+        from src.domains.remittances.service import approve_remittance
+
+        # Mock remittance ready for approval
+        mock_remittance_ready_for_approval.status = RemittanceStatus.Awaiting_Approval
+        mock_prisma.remittance.find_unique = AsyncMock(
+            return_value=mock_remittance_ready_for_approval
+        )
+
+        # Mock default bank account
+        mock_prisma.bankaccount.find_first = AsyncMock(return_value=mock_bank_account)
+
+        # Mock matched invoices
+        mock_prisma.invoice.find_many = AsyncMock(return_value=mock_matched_invoices)
+
+        # Mock external accounting factory and data service
+        mock_data_service = AsyncMock()
+        mock_data_service.create_batch_payment = AsyncMock(
+            return_value=BatchPaymentResult(
+                success=True, batch_id="test-batch-123", error_message=None
+            )
+        )
+        mock_factory.return_value.get_data_service = AsyncMock(
+            return_value=mock_data_service
+        )
+
+        # Mock database updates
+        mock_prisma.remittance.update = AsyncMock(
+            return_value=mock_remittance_ready_for_approval
+        )
+        mock_prisma.auditlog.create = AsyncMock()
+
+        # Act
+        result = await approve_remittance(
+            mock_prisma, "test-org-123", "test-user-123", "test-remittance-approval-123"
+        )
+
+        # Assert
+        assert result is not None
+
+        # Verify status was updated to Exporting initially
+        update_calls = mock_prisma.remittance.update.call_args_list
+        assert len(update_calls) >= 2
+
+        # First call should set status to Exporting
+        first_call = update_calls[0][1]
+        assert first_call["data"]["status"] == RemittanceStatus.Exporting
+
+        # Second call should set status to Exported_Unreconciled and add batch_id
+        second_call = update_calls[1][1]
+        assert second_call["data"]["status"] == RemittanceStatus.Exported_Unreconciled
+        assert second_call["data"]["xeroBatchId"] == "test-batch-123"
+
+        # Verify batch payment was created with correct data
+        mock_data_service.create_batch_payment.assert_called_once()
+        batch_payment_data = mock_data_service.create_batch_payment.call_args[0][1]
+        assert batch_payment_data.account_id == "test-account-123"
+        assert batch_payment_data.payment_date == "2024-01-15"
+        assert len(batch_payment_data.payments) == 2
+
+        # Verify audit logs were created
+        assert mock_prisma.auditlog.create.call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_approve_remittance_not_found(self, mock_prisma):
+        """Test approval of non-existent remittance."""
+        from src.domains.remittances.service import approve_remittance
+
+        mock_prisma.remittance.find_unique = AsyncMock(return_value=None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await approve_remittance(
+                mock_prisma, "test-org-123", "test-user-123", "nonexistent-id"
+            )
+
+        assert exc_info.value.status_code == 404
+        assert "Remittance not found" in str(exc_info.value.detail)
+
+    @pytest.mark.asyncio
+    async def test_approve_remittance_invalid_status(
+        self, mock_prisma, mock_remittance_uploaded
+    ):
+        """Test approval of remittance with wrong status."""
+        from prisma.enums import RemittanceStatus
+
+        from src.domains.remittances.service import approve_remittance
+
+        # Mock remittance with wrong status
+        mock_remittance_uploaded.status = RemittanceStatus.Uploaded
+        mock_prisma.remittance.find_unique = AsyncMock(
+            return_value=mock_remittance_uploaded
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await approve_remittance(
+                mock_prisma, "test-org-123", "test-user-123", "test-remittance-id-123"
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "Remittance is not awaiting approval" in str(exc_info.value.detail)
+
+    @pytest.mark.asyncio
+    async def test_approve_remittance_no_matched_lines(
+        self, mock_prisma, mock_remittance_no_matches
+    ):
+        """Test approval of remittance with no matched lines."""
+        from prisma.enums import RemittanceStatus
+
+        from src.domains.remittances.service import approve_remittance
+
+        mock_remittance_no_matches.status = RemittanceStatus.Awaiting_Approval
+        mock_prisma.remittance.find_unique = AsyncMock(
+            return_value=mock_remittance_no_matches
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await approve_remittance(
+                mock_prisma,
+                "test-org-123",
+                "test-user-123",
+                "test-remittance-no-matches-456",
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "No remittance lines found" in str(exc_info.value.detail)
+
+    @pytest.mark.asyncio
+    async def test_approve_remittance_no_default_bank_account(
+        self, mock_prisma, mock_remittance_ready_for_approval
+    ):
+        """Test approval when organization has no default bank account."""
+        from prisma.enums import RemittanceStatus
+
+        from src.domains.remittances.service import approve_remittance
+
+        mock_remittance_ready_for_approval.status = RemittanceStatus.Awaiting_Approval
+        mock_prisma.remittance.find_unique = AsyncMock(
+            return_value=mock_remittance_ready_for_approval
+        )
+
+        # No default bank account
+        mock_prisma.bankaccount.find_first = AsyncMock(return_value=None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await approve_remittance(
+                mock_prisma,
+                "test-org-123",
+                "test-user-123",
+                "test-remittance-approval-123",
+            )
+
+        assert exc_info.value.status_code == 400
+        assert "No default bank account configured" in str(exc_info.value.detail)
+
+    @pytest.mark.asyncio
+    @patch("src.domains.remittances.service.IntegrationFactory")
+    async def test_approve_remittance_batch_payment_failure(
+        self,
+        mock_factory,
+        mock_prisma,
+        mock_remittance_ready_for_approval,
+        mock_bank_account,
+        mock_matched_invoices,
+    ):
+        """Test approval when batch payment creation fails."""
+        from prisma.enums import RemittanceStatus
+
+        from src.domains.external_accounting.base.types import BatchPaymentResult
+        from src.domains.remittances.service import approve_remittance
+
+        # Setup successful pre-conditions
+        mock_remittance_ready_for_approval.status = RemittanceStatus.Awaiting_Approval
+        mock_prisma.remittance.find_unique = AsyncMock(
+            return_value=mock_remittance_ready_for_approval
+        )
+        mock_prisma.bankaccount.find_first = AsyncMock(return_value=mock_bank_account)
+        mock_prisma.invoice.find_many = AsyncMock(return_value=mock_matched_invoices)
+
+        # Mock batch payment failure
+        mock_data_service = AsyncMock()
+        mock_data_service.create_batch_payment = AsyncMock(
+            return_value=BatchPaymentResult(
+                success=False, batch_id=None, error_message="Invoice not found in Xero"
+            )
+        )
+        mock_factory.return_value.get_data_service = AsyncMock(
+            return_value=mock_data_service
+        )
+
+        # Mock database updates
+        mock_prisma.remittance.update = AsyncMock(
+            return_value=mock_remittance_ready_for_approval
+        )
+        mock_prisma.auditlog.create = AsyncMock()
+
+        # Act
+        result = await approve_remittance(
+            mock_prisma, "test-org-123", "test-user-123", "test-remittance-approval-123"
+        )
+
+        # Assert
+        assert result is not None
+
+        # Verify status was updated to Export_Failed
+        update_calls = mock_prisma.remittance.update.call_args_list
+        assert len(update_calls) >= 2
+
+        # Final call should set status to Export_Failed
+        final_call = update_calls[-1][1]
+        assert final_call["data"]["status"] == RemittanceStatus.Export_Failed
+        assert final_call["data"]["xeroBatchId"] is None
+
+        # Verify error was logged
+        audit_calls = mock_prisma.auditlog.create.call_args_list
+        error_audit = None
+        for call in audit_calls:
+            if call[1]["data"]["outcome"] == "error":
+                error_audit = call[1]["data"]
+                break
+
+        assert error_audit is not None
+        assert "Invoice not found in Xero" in error_audit["errorMessage"]
+
+    @pytest.mark.asyncio
+    async def test_approve_remittance_data_mapping(
+        self, mock_prisma, mock_remittance_ready_for_approval, mock_matched_invoices
+    ):
+        """Test correct data mapping from RemittanceLines to payment data."""
+        from decimal import Decimal
+
+        from src.domains.remittances.service import _build_batch_payment_data
+
+        # Mock bank account
+        mock_bank_account = Mock()
+        mock_bank_account.xeroAccountId = "mapped-account-456"
+
+        # Set up remittance with specific data
+        from datetime import date
+
+        mock_remittance_ready_for_approval.paymentDate = date(2024, 2, 20)
+        mock_remittance_ready_for_approval.reference = "CUSTOM-REF"
+
+        # Override remittance lines with specific amounts
+        line1 = Mock()
+        line1.invoiceNumber = "CUSTOM-INV-001"
+        line1.aiPaidAmount = Decimal("75.25")
+        line1.aiInvoiceId = "custom-invoice-1"
+        line1.overrideInvoiceId = None
+
+        line2 = Mock()
+        line2.invoiceNumber = "CUSTOM-INV-002"
+        line2.aiPaidAmount = Decimal("124.75")
+        line2.aiInvoiceId = None
+        line2.overrideInvoiceId = "custom-override-2"
+
+        mock_remittance_ready_for_approval.lines = [line1, line2]
+
+        # Mock invoices with specific Xero IDs
+        invoice1 = Mock()
+        invoice1.id = "custom-invoice-1"
+        invoice1.invoiceId = "xero-mapped-1"
+        invoice1.invoiceNumber = "CUSTOM-INV-001"
+
+        invoice2 = Mock()
+        invoice2.id = "custom-override-2"
+        invoice2.invoiceId = "xero-mapped-2"
+        invoice2.invoiceNumber = "CUSTOM-INV-002"
+
+        mapped_invoices = [invoice1, invoice2]
+
+        # Act
+        batch_payment_data = _build_batch_payment_data(
+            mock_remittance_ready_for_approval, mock_bank_account, mapped_invoices
+        )
+
+        # Assert mapping is correct
+        assert batch_payment_data.account_id == "mapped-account-456"
+        assert batch_payment_data.payment_date == "2024-02-20"
+        assert batch_payment_data.payment_reference == "RM: Batch Payment CUSTOM-REF"
+
+        payments = batch_payment_data.payments
+        assert len(payments) == 2
+
+        # Check first payment (AI match)
+        payment1 = payments[0]
+        assert payment1.invoice_id == "xero-mapped-1"
+        assert payment1.amount == Decimal("75.25")
+        assert payment1.reference == "RM: Payment for Invoice CUSTOM-INV-001"
+
+        # Check second payment (override match)
+        payment2 = payments[1]
+        assert payment2.invoice_id == "xero-mapped-2"
+        assert payment2.amount == Decimal("124.75")
+        assert payment2.reference == "RM: Payment for Invoice CUSTOM-INV-002"

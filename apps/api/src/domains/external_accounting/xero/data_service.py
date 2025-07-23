@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from typing import List, Optional, cast
+from typing import Dict, List, Optional, Union, cast
 
 import httpx
 from prisma.enums import XeroConnectionStatus
@@ -13,18 +13,27 @@ from src.shared.exceptions import (
 )
 
 from ..base.data_service import BaseIntegrationDataService
-from ..base.types import BaseAccountFilters, BaseInvoiceFilters
+from ..base.types import (
+    BaseAccountFilters,
+    BaseInvoiceFilters,
+    BatchPaymentData,
+    BatchPaymentResult,
+)
 from .types import (
     HttpHeaders,
     HttpParams,
     HttpRequestKwargs,
     PaymentData,
     XeroAccount,
+    XeroAccountRef,
     XeroAccountsResponse,
     XeroApiResponse,
     XeroAttachment,
     XeroAttachmentsResponse,
+    XeroBatchPaymentPayment,
+    XeroBatchPaymentRequest,
     XeroInvoice,
+    XeroInvoiceRef,
     XeroInvoicesResponse,
     XeroPayment,
     XeroPaymentsResponse,
@@ -218,7 +227,9 @@ class XeroDataService(
         org_id: str,
         params: Optional[HttpParams] = None,
         headers: Optional[HttpHeaders] = None,
-        json: Optional[PaymentData] = None,
+        json: Optional[
+            Union[PaymentData, Dict[str, str | int | float | bool | None]]
+        ] = None,
         files: Optional[dict[str, tuple[str, bytes]]] = None,
         max_retries: int = 3,
     ) -> XeroApiResponse:
@@ -269,24 +280,21 @@ class XeroDataService(
                 request_kwargs = HttpRequestKwargs(
                     headers=request_headers,
                     params=None,
-                    json_data=None,
                     files=None,
                     timeout=30.0,
                 )
 
                 if params:
                     request_kwargs.params = params
-                if json and not files:
-                    request_kwargs.json_data = json
-                    request_headers["Content-Type"] = "application/json"
                 if files:
                     request_kwargs.files = files
 
                 async with httpx.AsyncClient() as client:
-                    # Convert Pydantic model to dict and rename json_data back to json
+                    # Convert Pydantic model to dict and add json directly
                     kwargs_dict = request_kwargs.model_dump(exclude_none=True)
-                    if "json_data" in kwargs_dict:
-                        kwargs_dict["json"] = kwargs_dict.pop("json_data")
+                    if json and not files:
+                        kwargs_dict["json"] = json
+                        request_headers["Content-Type"] = "application/json"
                     response = await client.request(method, url, **kwargs_dict)
 
                     if response.status_code == 429:
@@ -325,3 +333,66 @@ class XeroDataService(
                 await asyncio.sleep(2**attempt)
 
         raise IntegrationConnectionError("Max retries exceeded for Xero API request")
+
+    async def create_batch_payment(
+        self, org_id: str, batch_payment_data: BatchPaymentData
+    ) -> BatchPaymentResult:
+        """
+        Create batch payment in Xero.
+
+        Args:
+            org_id: Organization ID
+            batch_payment_data: Batch payment details to create
+
+        Returns:
+            Result of batch payment creation with batch_id or error
+        """
+        try:
+            # Convert provider-agnostic data to explicit Xero request model
+            xero_request = XeroBatchPaymentRequest(
+                Account=XeroAccountRef(AccountID=batch_payment_data.account_id),
+                Date=batch_payment_data.payment_date,
+                Reference=batch_payment_data.payment_reference,
+                Payments=[
+                    XeroBatchPaymentPayment(
+                        Invoice=XeroInvoiceRef(InvoiceID=payment.invoice_id),
+                        Amount=str(payment.amount),
+                        Reference=payment.reference,
+                    )
+                    for payment in batch_payment_data.payments
+                ],
+            )
+
+            # Make API request with typed request model
+            response = await self._make_xero_request(
+                "PUT",
+                f"{self.base_url}/BatchPayments",
+                org_id,
+                json=xero_request.model_dump(mode="json"),
+            )
+
+            # Parse response
+            batch_payments = cast(dict, response).get("BatchPayments", [])
+
+            if not batch_payments:
+                raise IntegrationConnectionError(
+                    "No batch payment returned from Xero API"
+                )
+
+            # Return success result with batch ID
+            return BatchPaymentResult(
+                success=True,
+                batch_id=batch_payments[0]["BatchPaymentID"],
+                error_message=None,
+            )
+
+        except (IntegrationConnectionError, IntegrationTokenExpiredError):
+            # Re-raise integration-specific errors
+            raise
+        except Exception as e:
+            # Convert any other errors to integration errors
+            return BatchPaymentResult(
+                success=False,
+                batch_id=None,
+                error_message=f"Batch payment creation failed: {str(e)}",
+            )

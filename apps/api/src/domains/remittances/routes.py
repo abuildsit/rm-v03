@@ -153,10 +153,13 @@ async def update_remittance_endpoint(
     """
     Update a remittance record.
 
-    Requires MANAGE_REMITTANCES permission.
+    Requires MANAGE_REMITTANCES permission for regular updates.
+    For approval actions (status change to Exporting), admin role is checked within
+    the function.
+
     Can be used for:
     - Updating basic remittance details
-    - Approving matches (status transitions)
+    - Approving matches (status transitions to trigger batch payments)
     - Soft deletion
     """
     return await update_remittance(

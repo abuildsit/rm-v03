@@ -44,7 +44,7 @@ poetry run prisma db push   # Push schema changes to database
 - **Bank Accounts** (`/bankaccounts`) - Bank account management and payment configuration
 - **Invoices** (`/invoices`) - Invoice management with status workflows
 - **External Accounting** (`/external_accounting`) - Provider-agnostic accounting system integrations (Xero, future providers)
-- **Remittances** - Core remittance matching (AI-powered + manual overrides)
+- **Remittances** (`/remittances`) - AI-powered remittance processing with three-tier matching (exact → relaxed → numeric) using async concurrent algorithms, with manual override capabilities
 
 ### Database Design
 Multi-tenant PostgreSQL schema with:
