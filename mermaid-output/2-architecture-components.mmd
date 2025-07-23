@@ -1,0 +1,72 @@
+graph TB
+    subgraph "Frontend Application"
+        UI[React UI]
+    end
+    
+    subgraph "FastAPI Backend"
+        API[FastAPI App]
+        
+        subgraph "Domains"
+            AUTH[Auth Domain<br/>- JWT validation<br/>- Sessions<br/>- Profile management]
+            ORG[Organizations Domain<br/>- Multi-tenancy<br/>- Member management<br/>- Role assignment]
+            REM[Remittances Domain<br/>- Upload processing<br/>- AI extraction<br/>- Status workflow]
+            INV[Invoices Domain<br/>- Invoice sync<br/>- Status tracking<br/>- Currency support]
+            BANK[Bank Accounts Domain<br/>- Account management<br/>- Default selection<br/>- Payment config]
+            EXT[External Accounting Domain<br/>- Provider abstraction<br/>- Xero integration<br/>- Sync orchestration]
+        end
+        
+        subgraph "Shared Components"
+            PERM[Permissions System<br/>- RBAC<br/>- Route protection<br/>- Permission checks]
+            EXC[Exception Handling]
+            UTILS[Utilities]
+        end
+        
+        subgraph "Core Services"
+            DB[Prisma ORM<br/>Database Layer]
+            SETTINGS[Settings<br/>Configuration]
+        end
+    end
+    
+    subgraph "External Services"
+        SUPA[Supabase<br/>- Authentication<br/>- File Storage]
+        XERO[Xero API<br/>- Accounting data<br/>- OAuth2]
+        OPENAI[OpenAI API<br/>- Document extraction<br/>- AI processing]
+        PG[(PostgreSQL<br/>Database)]
+    end
+    
+    UI --> API
+    API --> AUTH
+    API --> ORG
+    API --> REM
+    API --> INV
+    API --> BANK
+    API --> EXT
+    
+    AUTH --> SUPA
+    REM --> OPENAI
+    EXT --> XERO
+    
+    AUTH --> PERM
+    ORG --> PERM
+    REM --> PERM
+    INV --> PERM
+    BANK --> PERM
+    EXT --> PERM
+    
+    PERM --> DB
+    AUTH --> DB
+    ORG --> DB
+    REM --> DB
+    INV --> DB
+    BANK --> DB
+    EXT --> DB
+    
+    DB --> PG
+    
+    style AUTH fill:#e1f5fe
+    style ORG fill:#e8f5e9
+    style REM fill:#fff3e0
+    style INV fill:#fce4ec
+    style BANK fill:#f3e5f5
+    style EXT fill:#e8eaf6
+    style PERM fill:#ffebee

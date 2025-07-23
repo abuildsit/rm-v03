@@ -1,0 +1,103 @@
+erDiagram
+    Profile ||--o{ AuthLink : "has"
+    Profile ||--o{ OrganizationMember : "has memberships"
+    Profile ||--o{ XeroConnection : "creates"
+    Profile ||--o{ XeroSyncLog : "initiates"
+    Profile }o--|| Organization : "last accessed"
+    
+    Organization ||--o{ OrganizationMember : "has members"
+    Organization ||--o{ Remittance : "processes"
+    Organization ||--o{ Invoice : "manages"
+    Organization ||--o{ BankAccount : "owns"
+    Organization ||--o{ AuditLog : "tracks"
+    Organization ||--|| XeroConnection : "has"
+    Organization ||--o{ XeroSyncLog : "logs"
+    
+    OrganizationMember {
+        uuid id PK
+        uuid profileId FK
+        uuid organizationId FK
+        enum role "owner|admin|user|auditor"
+        enum status "active|invited|removed"
+        datetime joinedAt
+    }
+    
+    Remittance ||--o{ RemittanceLine : "contains"
+    Remittance ||--o{ AuditLog : "tracks changes"
+    Remittance {
+        uuid id PK
+        uuid organizationId FK
+        string filename
+        string filePath
+        enum status "Uploaded|Processing|Exported|Reconciled..."
+        date paymentDate
+        decimal totalAmount
+        string reference
+        decimal confidenceScore
+        json extractedRawJson
+    }
+    
+    RemittanceLine }o--|| Invoice : "AI matched"
+    RemittanceLine }o--|| Invoice : "manual override"
+    RemittanceLine {
+        uuid id PK
+        uuid remittanceId FK
+        string invoiceNumber
+        decimal aiPaidAmount
+        decimal manualPaidAmount
+        uuid aiInvoiceId FK
+        uuid overrideInvoiceId FK
+    }
+    
+    Invoice {
+        uuid id PK
+        uuid organizationId FK
+        string invoiceId "Xero ID"
+        string invoiceNumber
+        string contactName
+        date invoiceDate
+        date dueDate
+        enum status "DRAFT|SUBMITTED|AUTHORISED|PAID|VOIDED"
+        decimal total
+        decimal amountDue
+        decimal amountPaid
+        string currencyCode
+    }
+    
+    BankAccount {
+        uuid id PK
+        uuid organizationId FK
+        string xeroAccountId
+        string xeroName
+        string xeroCode
+        string type "BANK"
+        boolean isDefault
+        string currencyCode
+        boolean enablePaymentsToAccount
+    }
+    
+    XeroConnection {
+        uuid id PK
+        uuid organizationId FK "unique"
+        string xeroTenantId "unique"
+        string accessToken
+        string refreshToken
+        datetime expiresAt
+        enum connectionStatus "connected|expired|revoked|error"
+        datetime lastSyncAt
+        enum syncStatus "pending|syncing|completed|failed"
+    }
+    
+    AuditLog {
+        uuid id PK
+        uuid remittanceId FK
+        uuid userId FK
+        uuid organizationId FK
+        enum action "created|updated|approved|exported..."
+        enum outcome "success|error|rejected|pending"
+        datetime timestamp
+        string fieldChanged
+        string oldValue
+        string newValue
+        json metadata
+    }

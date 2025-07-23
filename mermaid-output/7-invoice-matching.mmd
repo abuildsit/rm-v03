@@ -1,0 +1,24 @@
+flowchart TD
+    A["Start: Invoice Number from Remittance Line"] --> B["Normalize Input - Trim whitespace - Convert to uppercase"]
+    
+    B --> C{"Exact Match? Case-insensitive"}
+    C -->|Yes| D["Return Match - Confidence: 100%"]
+    C -->|No| E["Relaxed Match - Remove special chars"]
+    
+    E --> F{"Relaxed Match Found?"}
+    F -->|Yes| G["Return Match - Confidence: 85%"]
+    F -->|No| H["Extract Numbers Only"]
+    
+    H --> I{"Numeric Match Found?"}
+    I -->|Yes| J["Return Match - Confidence: 70%"]
+    I -->|No| K["No Match Found"]
+    
+    K --> L{"Manual Override Available?"}
+    L -->|Yes| M["Use Override Invoice"]
+    L -->|No| N["Mark as Unmatched"]
+    
+    subgraph "Matching Examples"
+        EX1["Input: INV-001 | Exact: INV-001 ✓"]
+        EX2["Input: INV 001 | Relaxed: INV001 ✓"]
+        EX3["Input: Invoice #001 | Numeric: 001 ✓"]
+    end

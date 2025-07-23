@@ -1,0 +1,25 @@
+flowchart LR
+    subgraph "Remittance Lifecycle"
+        A[Upload File] --> B[Create Audit Log<br/>action: created]
+        B --> C[Process File]
+        C --> D[Create Audit Log<br/>action: updated]
+        D --> E[Manual Override]
+        E --> F[Create Audit Log<br/>action: manual_override]
+        F --> G[Approve]
+        G --> H[Create Audit Log<br/>action: approved]
+        H --> I[Export to Xero]
+        I --> J[Create Audit Log<br/>action: exported]
+        J --> K[Reconcile]
+        K --> L[Create Audit Log<br/>action: reconciled]
+    end
+    
+    subgraph "Audit Log Structure"
+        LOG[AuditLog Entry<br/>- remittanceId<br/>- userId<br/>- organizationId<br/>- action<br/>- outcome<br/>- timestamp<br/>- fieldChanged<br/>- oldValue<br/>- newValue<br/>- metadata]
+    end
+    
+    B --> LOG
+    D --> LOG
+    F --> LOG
+    H --> LOG
+    J --> LOG
+    L --> LOG

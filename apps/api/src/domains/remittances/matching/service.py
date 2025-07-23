@@ -5,8 +5,7 @@ Matching service for intelligent invoice matching using three-pass algorithm.
 import logging
 import time
 from decimal import Decimal
-
-# No typing imports needed - using Python 3.12+ type hints
+from typing import List
 from uuid import UUID
 
 from prisma.enums import InvoiceStatus
@@ -15,10 +14,8 @@ from prisma.models import Invoice
 from prisma import Prisma
 from src.domains.remittances.exceptions import MatchingFailedError
 from src.domains.remittances.matching.confidence import calculate_match_confidence
-from src.domains.remittances.matching.strategies import (
-    build_lookup_table,
-    find_potential_matches,
-)
+
+# Note: find_potential_matches is kept for backwards compatibility but not used directly
 from src.domains.remittances.types import (
     ExtractedPayment,
     MatchingPassType,
@@ -66,15 +63,15 @@ class MatchingService:
                 logger.warning(f"No invoices found for organization {organization_id}")
                 return self._create_empty_results(payments, remittance_id)
 
-            # Build lookup table for O(1) matching
+            # Prepare invoice data for new async matching system
             invoice_map = {
                 inv.invoiceNumber: inv for inv in invoices if inv.invoiceNumber
             }
-            lookup_table = build_lookup_table(list(invoice_map.keys()))
+            invoice_numbers = list(invoice_map.keys())
 
             logger.info(
-                f"Built lookup table with {len(lookup_table)} variations "
-                f"from {len(invoice_map)} invoices"
+                f"Prepared {len(invoice_numbers)} invoice numbers "
+                "for concurrent matching"
             )
 
             # Debug: Show what invoices we're working with
@@ -94,23 +91,6 @@ class MatchingService:
                     flush=True,
                 )
 
-            # Debug: Show some lookup table entries
-            print(
-                f"🔍 LOOKUP TABLE DEBUG: {len(lookup_table)} normalized variations:",
-                file=sys.stderr,
-                flush=True,
-            )
-            for norm_key, orig_invoices in sorted(
-                list(lookup_table.items())[:15]
-            ):  # Show first 15
-                print(f"  '{norm_key}' → {orig_invoices}", file=sys.stderr, flush=True)
-            if len(lookup_table) > 15:
-                print(
-                    f"  ... and {len(lookup_table) - 15} more variations",
-                    file=sys.stderr,
-                    flush=True,
-                )
-
             # Process each payment
             results = []
             match_stats = {"exact": 0, "relaxed": 0, "numeric": 0, "unmatched": 0}
@@ -120,7 +100,7 @@ class MatchingService:
                     payment=payment,
                     remittance_id=remittance_id,
                     line_number=i + 1,
-                    lookup_table=lookup_table,
+                    invoice_numbers=invoice_numbers,
                     invoice_map=invoice_map,
                 )
 
@@ -171,26 +151,31 @@ class MatchingService:
         payment: ExtractedPayment,
         remittance_id: UUID,
         line_number: int,
-        lookup_table: dict[str, list[str]],
+        invoice_numbers: List[str],
         invoice_map: dict[str, Invoice],
     ) -> MatchResult:
         """
-        Match a single payment against invoices using three-pass strategy.
+        Match a single payment against invoices using new async concurrent strategy.
 
         Args:
             payment: Payment to match
             remittance_id: Remittance ID
             line_number: Line number for tracking
-            lookup_table: Pre-built lookup table
+            invoice_numbers: List of available invoice numbers
             invoice_map: Map of invoice numbers to invoice objects
 
         Returns:
             Match result for the payment
         """
-        # Find potential matches using three-pass strategy
-        potential_matches = find_potential_matches(payment.invoice_number, lookup_table)
+        from .strategies import match_payments_concurrent
 
-        if not potential_matches:
+        # Use the new concurrent matching system
+        results = await match_payments_concurrent(
+            [payment.invoice_number], invoice_numbers
+        )
+        payment_invoice, match_result = results[0]
+
+        if not match_result:
             # No matches found
             return MatchResult(
                 line_id=UUID(int=line_number),  # Temporary ID
@@ -200,8 +185,8 @@ class MatchingService:
                 match_type=None,
             )
 
-        # Select the best match based on match type priority (exact > relaxed > numeric)
-        match_type_str, matched_invoice_number = self._select_best_match(potential_matches)
+        # Extract match type and matched invoice number
+        match_type_str, matched_invoice_number = match_result
         match_type = MatchingPassType(match_type_str)
 
         # Get the matched invoice
@@ -251,33 +236,6 @@ class MatchingService:
 
         difference = abs(payment_amount - invoice.total)
         return difference <= tolerance
-
-    def _select_best_match(self, potential_matches: list[tuple[str, str]]) -> tuple[str, str]:
-        """
-        Select the best match from potential matches based on match type priority.
-        
-        Priority order: exact > relaxed > numeric
-        
-        Args:
-            potential_matches: List of (match_type, matched_invoice) tuples
-            
-        Returns:
-            The best match tuple (match_type, matched_invoice)
-        """
-        # Define priority order (lower number = higher priority)
-        match_priority = {
-            "exact": 1,
-            "relaxed": 2, 
-            "numeric": 3
-        }
-        
-        # Sort matches by priority (exact matches first)
-        sorted_matches = sorted(
-            potential_matches, 
-            key=lambda x: match_priority.get(x[0], 999)
-        )
-        
-        return sorted_matches[0]
 
     async def _get_organization_invoices(self, organization_id: UUID) -> list[Invoice]:
         """

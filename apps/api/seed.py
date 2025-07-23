@@ -392,7 +392,8 @@ async def main():
                 "isDiscounted": False,
                 "hasErrors": False,
             },
-            # Remittance matching test invoices - different formats to test matching algorithms
+            # Remittance matching test invoices - different formats to test
+            # matching algorithms
             {
                 "id": str(uuid.uuid4()),
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
@@ -417,7 +418,7 @@ async def main():
                 "id": str(uuid.uuid4()),
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
                 "invoiceId": "xero-inv-39840",
-                "invoiceNumber": "inv39840",  # Case insensitive match (matches INV39840)
+                "invoiceNumber": "inv39840",  # Case insensitive match
                 "contactName": "TechFlow Solutions",
                 "contactId": str(uuid.uuid4()),
                 "invoiceDate": datetime(2025, 6, 20),
@@ -457,7 +458,7 @@ async def main():
                 "id": str(uuid.uuid4()),
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
                 "invoiceId": "xero-inv-39791",
-                "invoiceNumber": "Inv--39791",  # Special character removal (matches INV39791)
+                "invoiceNumber": "Inv--39791",  # Special character removal
                 "contactName": "BlueTech Innovations",
                 "contactId": str(uuid.uuid4()),
                 "invoiceDate": datetime(2025, 6, 25),
@@ -477,7 +478,7 @@ async def main():
                 "id": str(uuid.uuid4()),
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
                 "invoiceId": "xero-inv-39859",
-                "invoiceNumber": "Invoice-Sarah-39859",  # Complex pattern (matches INV39859)
+                "invoiceNumber": "Invoice-Sarah-39859",  # Complex pattern
                 "contactName": "Creative Solutions Ltd",
                 "contactId": str(uuid.uuid4()),
                 "invoiceDate": datetime(2025, 6, 30),

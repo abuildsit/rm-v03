@@ -1,8 +1,7 @@
-"""
-Normalization strategies for invoice matching.
-"""
-
+import asyncio
 import re
+import sys
+from typing import Dict, List, Optional, Tuple
 
 
 def exact_normalize(invoice_number: str) -> str:
@@ -54,225 +53,266 @@ def numeric_normalize(invoice_number: str) -> str:
     return "".join(digits)
 
 
-def generate_variations(invoice_number: str) -> list[str]:
-    """
-    Generate all normalization variations for an invoice number.
-
-    Args:
-        invoice_number: Raw invoice number
-
-    Returns:
-        List of normalized variations [exact, relaxed, numeric]
-    """
-    variations = []
-
-    # Exact normalization
-    exact = exact_normalize(invoice_number)
-    if exact:
-        variations.append(exact)
-
-    # Relaxed normalization
-    relaxed = relaxed_normalize(invoice_number)
-    if relaxed and relaxed not in variations:
-        variations.append(relaxed)
-
-    # Numeric normalization
-    numeric = numeric_normalize(invoice_number)
-    if numeric and len(numeric) >= 3 and numeric not in variations:  # At least 3 digits
-        variations.append(numeric)
-
-    return variations
-
-
-def build_lookup_table(invoice_numbers: list[str]) -> dict[str, list[str]]:
-    """
-    Build lookup table for O(1) invoice matching.
-    Maps normalized values back to original invoice numbers.
-
-    Args:
-        invoice_numbers: List of original invoice numbers
-
-    Returns:
-        Dictionary mapping normalized values to original invoice numbers
-    """
-    lookup: dict[str, list[str]] = {}
+async def build_exact_lookup(invoice_numbers: List[str]) -> Dict[str, List[str]]:
+    """Build lookup table for exact matching."""
+    lookup: Dict[str, List[str]] = {}
 
     for original in invoice_numbers:
-        variations = generate_variations(original)
-
-        for variation in variations:
-            if variation not in lookup:
-                lookup[variation] = []
-            lookup[variation].append(original)
+        exact = exact_normalize(original)
+        if exact:
+            if exact not in lookup:
+                lookup[exact] = []
+            lookup[exact].append(original)
 
     return lookup
 
 
+async def build_relaxed_lookup(invoice_numbers: List[str]) -> Dict[str, List[str]]:
+    """Build lookup table for relaxed matching."""
+    lookup: Dict[str, List[str]] = {}
+
+    for original in invoice_numbers:
+        relaxed = relaxed_normalize(original)
+        if relaxed:
+            if relaxed not in lookup:
+                lookup[relaxed] = []
+            lookup[relaxed].append(original)
+
+    return lookup
+
+
+async def build_numeric_lookup(invoice_numbers: List[str]) -> Dict[str, List[str]]:
+    """Build lookup table for numeric matching."""
+    lookup: Dict[str, List[str]] = {}
+
+    for original in invoice_numbers:
+        numeric = numeric_normalize(original)
+        if numeric and len(numeric) >= 3:  # At least 3 digits
+            if numeric not in lookup:
+                lookup[numeric] = []
+            lookup[numeric].append(original)
+
+    return lookup
+
+
+async def try_exact_match(
+    target: str, lookup_table: Dict[str, List[str]]
+) -> Optional[str]:
+    """Try to find exact match for target."""
+    normalized = exact_normalize(target)
+    matches = lookup_table.get(normalized, [])
+    return matches[0] if matches else None
+
+
+async def try_relaxed_match(
+    target: str, lookup_table: Dict[str, List[str]]
+) -> Optional[str]:
+    """Try to find relaxed match for target."""
+    normalized = relaxed_normalize(target)
+    matches = lookup_table.get(normalized, [])
+    return matches[0] if matches else None
+
+
+async def try_numeric_match(
+    target: str, lookup_table: Dict[str, List[str]]
+) -> Optional[str]:
+    """Try to find numeric match for target."""
+    normalized = numeric_normalize(target)
+    if len(normalized) >= 3:
+        matches = lookup_table.get(normalized, [])
+        return matches[0] if matches else None
+    return None
+
+
+async def find_best_match_concurrent(
+    target_number: str,
+    exact_lookup: Dict[str, List[str]],
+    relaxed_lookup: Dict[str, List[str]],
+    numeric_lookup: Dict[str, List[str]],
+) -> Optional[Tuple[str, str]]:
+    """
+    Find the best match using concurrent async matching with priority.
+
+    Args:
+        target_number: Invoice number to match
+        exact_lookup: Lookup table for exact matches
+        relaxed_lookup: Lookup table for relaxed matches
+        numeric_lookup: Lookup table for numeric matches
+
+    Returns:
+        Tuple of (match_type, matched_invoice) or None if no match
+    """
+    print(
+        f"🔍 ASYNC MATCHING DEBUG: Searching for '{target_number}'",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    # Start all three match types concurrently
+    exact_task = asyncio.create_task(try_exact_match(target_number, exact_lookup))
+    relaxed_task = asyncio.create_task(try_relaxed_match(target_number, relaxed_lookup))
+    numeric_task = asyncio.create_task(try_numeric_match(target_number, numeric_lookup))
+
+    # Wait for all to complete
+    exact_result, relaxed_result, numeric_result = await asyncio.gather(
+        exact_task, relaxed_task, numeric_task
+    )
+
+    # Return first successful match in priority order (exact > relaxed > numeric)
+    if exact_result:
+        print(
+            f"  ✅ EXACT match found: '{target_number}' → '{exact_result}'",
+            file=sys.stderr,
+            flush=True,
+        )
+        return ("exact", exact_result)
+
+    if relaxed_result:
+        print(
+            f"  ✅ RELAXED match found: '{target_number}' → '{relaxed_result}'",
+            file=sys.stderr,
+            flush=True,
+        )
+        return ("relaxed", relaxed_result)
+
+    if numeric_result:
+        print(
+            f"  ✅ NUMERIC match found: '{target_number}' → '{numeric_result}'",
+            file=sys.stderr,
+            flush=True,
+        )
+        return ("numeric", numeric_result)
+
+    print(
+        f"  ❌ No match found for '{target_number}'",
+        file=sys.stderr,
+        flush=True,
+    )
+    return None
+
+
+async def match_payments_concurrent(
+    payment_invoice_numbers: List[str], invoice_numbers: List[str]
+) -> List[Tuple[str, Optional[Tuple[str, str]]]]:
+    """
+    Match multiple payments to invoices using concurrent async matching.
+
+    Args:
+        payment_invoice_numbers: Invoice numbers from remittance
+        invoice_numbers: Available invoice numbers from database
+
+    Returns:
+        List of tuples: (payment_invoice_number, match_result)
+        where match_result is (match_type, matched_invoice) or None
+    """
+    print(
+        f"🚀 Starting concurrent matching for {len(payment_invoice_numbers)} "
+        f"payments against {len(invoice_numbers)} invoices",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    # Build all lookup tables concurrently
+    exact_task = asyncio.create_task(build_exact_lookup(invoice_numbers))
+    relaxed_task = asyncio.create_task(build_relaxed_lookup(invoice_numbers))
+    numeric_task = asyncio.create_task(build_numeric_lookup(invoice_numbers))
+
+    exact_lookup, relaxed_lookup, numeric_lookup = await asyncio.gather(
+        exact_task, relaxed_task, numeric_task
+    )
+
+    print(
+        f"📊 Built lookups: exact={len(exact_lookup)}, "
+        f"relaxed={len(relaxed_lookup)}, numeric={len(numeric_lookup)}",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    # Match all payments concurrently
+    match_tasks = [
+        asyncio.create_task(
+            find_best_match_concurrent(
+                payment, exact_lookup, relaxed_lookup, numeric_lookup
+            )
+        )
+        for payment in payment_invoice_numbers
+    ]
+
+    match_results = await asyncio.gather(*match_tasks)
+
+    # Combine payment numbers with their match results
+    results = list(zip(payment_invoice_numbers, match_results))
+
+    # Log summary
+    exact_count = sum(1 for _, result in results if result and result[0] == "exact")
+    relaxed_count = sum(
+        1 for _, result in results if result and result[0] == "relaxed"
+    )  # noqa: E501
+    numeric_count = sum(1 for _, result in results if result and result[0] == "numeric")
+    no_match_count = sum(1 for _, result in results if result is None)
+
+    print(
+        f"🎉 Matching complete: {exact_count} exact, {relaxed_count} relaxed, "
+        f"{numeric_count} numeric, {no_match_count} no match",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    return results
+
+
+# Legacy function for backwards compatibility - redirects to concurrent version
 def find_potential_matches(
     target_number: str, lookup_table: dict[str, list[str]]
 ) -> list[tuple[str, str]]:
     """
-    Find potential matches for a target invoice number.
-
-    Args:
-        target_number: Invoice number to match
-        lookup_table: Pre-built lookup table
-
-    Returns:
-        List of (match_type, matched_invoice) tuples
+    Legacy function - converts old format to new concurrent approach.
+    This maintains backwards compatibility while using the new async system.
     """
-    import sys
-
-    matches = []
-
     print(
-        f"🔍 MATCHING DEBUG: Searching for '{target_number}'",
+        "⚠️ Using legacy find_potential_matches - "
+        "consider migrating to match_payments_concurrent",
         file=sys.stderr,
         flush=True,
     )
 
-    # Get all possible normalizations
-    exact = exact_normalize(target_number)
-    relaxed = relaxed_normalize(target_number)
-    numeric = numeric_normalize(target_number)
+    # Extract invoice numbers from the old combined lookup table
+    invoice_numbers = []
+    for matches in lookup_table.values():
+        invoice_numbers.extend(matches)
+    invoice_numbers = list(set(invoice_numbers))  # Remove duplicates
 
-    print(
-        f"  📝 Normalizations: exact='{exact}', relaxed='{relaxed}', numeric='{numeric}'",
-        file=sys.stderr,
-        flush=True,
-    )
+    # Run the new concurrent matcher
+    async def run_match() -> Optional[Tuple[str, str]]:
+        results = await match_payments_concurrent([target_number], invoice_numbers)
+        return results[0][1]  # Return just the match result for this target
 
-    # Collect all potential matches first
-    potential_matches = []
-    
-    # Check exact matches
-    if exact in lookup_table:
-        for match in lookup_table[exact]:
-            potential_matches.append((match, "exact_lookup"))
+    # Run the async function synchronously for backwards compatibility
+    result = asyncio.run(run_match())
 
-    # Check relaxed matches  
-    if relaxed in lookup_table and relaxed != exact:
-        for match in lookup_table[relaxed]:
-            potential_matches.append((match, "relaxed_lookup"))
-
-    # Check numeric matches
-    if numeric in lookup_table and numeric != relaxed and numeric != exact and len(numeric) >= 3:
-        for match in lookup_table[numeric]:
-            potential_matches.append((match, "numeric_lookup"))
-
-    # Now determine the correct match type based on actual similarity
-    for match, lookup_type in potential_matches:
-        match_type = determine_match_type(target_number, match)
-        matches.append((match_type, match))
-        print(
-            f"  ✅ {match_type.upper()} match found: '{target_number}' → '{match}' (via {lookup_type})",
-            file=sys.stderr,
-            flush=True,
-        )
-
-    print(f"  📊 Total matches found: {len(matches)}", file=sys.stderr, flush=True)
-    return matches
-
-
-def determine_match_type(target: str, matched_invoice: str) -> str:
-    """
-    Determine the actual match type between target and matched invoice.
-    
-    Args:
-        target: The search term from remittance
-        matched_invoice: The matched invoice number from database
-    
-    Returns:
-        Match type: "exact", "relaxed", or "numeric"
-    """
-    # Normalize both for comparison
-    target_exact = exact_normalize(target)
-    match_exact = exact_normalize(matched_invoice)
-    
-    # True exact match: both exact normalizations are identical
-    if target_exact == match_exact:
-        return "exact"
-    
-    target_relaxed = relaxed_normalize(target)
-    match_relaxed = relaxed_normalize(matched_invoice)
-    
-    # Relaxed match: relaxed normalizations match but exact don't
-    if target_relaxed == match_relaxed:
-        return "relaxed"
-    
-    target_numeric = numeric_normalize(target)
-    match_numeric = numeric_normalize(matched_invoice)
-    
-    # Numeric match: only numeric parts match
-    if target_numeric == match_numeric and len(target_numeric) >= 3:
-        return "numeric"
-    
-    # Fallback (shouldn't happen with correct lookup table)
-    return "relaxed"
+    if result:
+        match_type, matched_invoice = result
+        return [(match_type, matched_invoice)]
+    else:
+        return []
 
 
 def calculate_similarity_score(original: str, target: str) -> float:
     """
     Calculate similarity score between two invoice numbers.
-    Used for confidence calculation.
-
-    Args:
-        original: Original invoice number
-        target: Target invoice number to compare
-
-    Returns:
-        Similarity score between 0.0 and 1.0
+    This is kept for backwards compatibility.
     """
-    if not original or not target:
-        return 0.0
-
-    # Normalize both for comparison
-    orig_norm = exact_normalize(original)
-    target_norm = exact_normalize(target)
-
-    if orig_norm == target_norm:
+    if original == target:
         return 1.0
 
-    # Check relaxed match
-    orig_relaxed = relaxed_normalize(original)
-    target_relaxed = relaxed_normalize(target)
+    # Simple similarity based on common characters
+    original_chars = set(original.lower())
+    target_chars = set(target.lower())
 
-    if orig_relaxed == target_relaxed:
-        return 0.85
-
-    # Check numeric match
-    orig_numeric = numeric_normalize(original)
-    target_numeric = numeric_normalize(target)
-
-    if orig_numeric == target_numeric and len(orig_numeric) >= 3:
-        return 0.70
-
-    # Calculate character-level similarity as fallback
-    return _calculate_char_similarity(orig_norm, target_norm)
-
-
-def _calculate_char_similarity(str1: str, str2: str) -> float:
-    """
-    Calculate character-level similarity between two strings.
-
-    Args:
-        str1: First string
-        str2: Second string
-
-    Returns:
-        Similarity score between 0.0 and 1.0
-    """
-    if not str1 or not str2:
+    if not original_chars or not target_chars:
         return 0.0
 
-    # Simple Jaccard similarity on character level
-    set1 = set(str1.lower())
-    set2 = set(str2.lower())
+    intersection = len(original_chars.intersection(target_chars))
+    union = len(original_chars.union(target_chars))
 
-    intersection = len(set1 & set2)
-    union = len(set1 | set2)
-
-    if union == 0:
-        return 0.0
-
-    return intersection / union
+    return intersection / union if union > 0 else 0.0

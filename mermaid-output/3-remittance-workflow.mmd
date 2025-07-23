@@ -1,0 +1,58 @@
+sequenceDiagram
+    participant User
+    participant API
+    participant RemittanceService
+    participant FileStorage
+    participant OpenAI
+    participant InvoiceService
+    participant XeroService
+    participant Database
+    
+    User->>API: Upload remittance PDF
+    API->>RemittanceService: processUpload(file)
+    RemittanceService->>FileStorage: store(file)
+    FileStorage-->>RemittanceService: filePath
+    
+    RemittanceService->>Database: createRemittance(status=Uploaded)
+    Database-->>RemittanceService: remittanceId
+    
+    RemittanceService->>OpenAI: extractData(filePath)
+    Note over OpenAI: AI-powered extraction<br/>using Assistant API
+    OpenAI-->>RemittanceService: extractedData
+    
+    RemittanceService->>Database: updateRemittance(status=Processing)
+    
+    loop For each invoice line
+        RemittanceService->>InvoiceService: matchInvoice(invoiceNumber)
+        Note over InvoiceService: Three-pass matching:<br/>1. Exact match<br/>2. Relaxed match<br/>3. Numeric match
+        InvoiceService->>Database: findInvoice(criteria)
+        Database-->>InvoiceService: invoice or null
+        InvoiceService-->>RemittanceService: matchResult
+        
+        RemittanceService->>Database: createRemittanceLine(matchData)
+    end
+    
+    RemittanceService->>Database: updateRemittance(status=Awaiting_Approval)
+    
+    User->>API: reviewMatches()
+    API-->>User: matchResults
+    
+    opt Manual Override
+        User->>API: overrideMatch(lineId, invoiceId)
+        API->>RemittanceService: updateMatch()
+        RemittanceService->>Database: updateRemittanceLine(overrideInvoiceId)
+    end
+    
+    User->>API: approveRemittance()
+    API->>RemittanceService: export(remittanceId)
+    
+    RemittanceService->>Database: updateRemittance(status=Exporting)
+    
+    RemittanceService->>XeroService: createBatchPayment(paymentData)
+    XeroService->>XeroService: OAuth token refresh
+    XeroService-->>RemittanceService: batchId
+    
+    RemittanceService->>Database: updateRemittance(status=Exported_Unreconciled)
+    RemittanceService->>Database: createAuditLog(action=exported)
+    
+    API-->>User: Export successful

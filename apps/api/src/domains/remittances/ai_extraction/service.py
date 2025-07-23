@@ -73,7 +73,8 @@ class AIExtractionService:
             )
 
             # Convert to domain model with proper type conversion
-            # Handle both old format (snake_case) and new format (from OpenAI assistant function calls)
+            # Handle both old format (snake_case) and new format
+            # (from OpenAI assistant function calls)
             from datetime import datetime
             from decimal import Decimal
 
@@ -92,24 +93,30 @@ class AIExtractionService:
                 raise ValueError("No total amount found in extracted data")
 
             # Extract payment reference - handle both formats
-            payment_reference = ai_data.get("payment_reference") or ai_data.get(
+            payment_reference_raw = ai_data.get("payment_reference") or ai_data.get(
                 "PaymentReference"
+            )
+            payment_reference = (
+                str(payment_reference_raw)
+                if payment_reference_raw is not None
+                else None
             )
 
             # Extract payments - handle both formats
             payments_data = ai_data.get("payments") or ai_data.get("Payments", [])
             payments = []
-            for p in payments_data:
-                invoice_number = p.get("invoice_number") or p.get("InvoiceNo")
-                paid_amount = p.get("paid_amount") or p.get("PaidAmount")
+            if isinstance(payments_data, list):
+                for p in payments_data:
+                    invoice_number = p.get("invoice_number") or p.get("InvoiceNo")
+                    paid_amount = p.get("paid_amount") or p.get("PaidAmount")
 
-                if invoice_number is not None and paid_amount is not None:
-                    payments.append(
-                        ExtractedPayment(
-                            invoice_number=str(invoice_number),
-                            paid_amount=Decimal(str(paid_amount)),
+                    if invoice_number is not None and paid_amount is not None:
+                        payments.append(
+                            ExtractedPayment(
+                                invoice_number=str(invoice_number),
+                                paid_amount=Decimal(str(paid_amount)),
+                            )
                         )
-                    )
 
             # Extract confidence - handle both formats, default to 0.8 if not provided
             confidence = ai_data.get("confidence") or ai_data.get("Confidence", 0.8)

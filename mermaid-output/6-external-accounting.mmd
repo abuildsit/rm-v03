@@ -1,0 +1,50 @@
+graph TB
+    subgraph "API Layer"
+        ROUTE["/external-accounting/* API Routes"]
+    end
+    
+    subgraph "Provider Abstraction Layer"
+        FACTORY["IntegrationFactory - Provider Resolution"]
+        BASE["BaseIntegrationDataService - Abstract Interface"]
+        ORCH["SyncOrchestrator - Generic Sync Logic"]
+    end
+    
+    subgraph "Provider Implementations"
+        XERO_IMPL["XeroDataService - Xero Implementation"]
+        FUTURE1["FutureProvider1 - QuickBooks/MYOB/etc"]
+        FUTURE2["FutureProvider2 - Other Providers"]
+    end
+    
+    subgraph "Provider Services"
+        XERO_API["Xero API - OAuth2 + REST"]
+        OTHER_API["Other APIs - Future Providers"]
+    end
+    
+    subgraph "Database"
+        CONN[("Provider Connections - XeroConnection table")]
+        DATA[("Synced Data - Invoices, Accounts")]
+        LOGS[("Sync Logs - XeroSyncLog table")]
+    end
+    
+    ROUTE --> FACTORY
+    FACTORY --> BASE
+    FACTORY --> CONN
+    
+    BASE <-.-> XERO_IMPL
+    BASE <-.-> FUTURE1
+    BASE <-.-> FUTURE2
+    
+    XERO_IMPL --> XERO_API
+    FUTURE1 --> OTHER_API
+    FUTURE2 --> OTHER_API
+    
+    ORCH --> BASE
+    ORCH --> DATA
+    ORCH --> LOGS
+    
+    style BASE fill:#e8eaf6
+    style FACTORY fill:#e8eaf6
+    style ORCH fill:#e8eaf6
+    style XERO_IMPL fill:#c5e1a5
+    style FUTURE1 fill:#ffccbc,stroke-dasharray: 5 5
+    style FUTURE2 fill:#ffccbc,stroke-dasharray: 5 5

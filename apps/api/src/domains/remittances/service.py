@@ -460,7 +460,8 @@ async def process_remittance_background(
             )
             if current_thread_id:
                 print(
-                    f"💾 Saving thread ID {current_thread_id} despite extraction failure",
+                    f"💾 Saving thread ID {current_thread_id} despite "
+                    f"extraction failure",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -516,19 +517,23 @@ async def process_remittance_background(
         )
 
         for payment in extracted_data.payments:
-            line_data = {
-                "remittanceId": remittance_id,
-                "invoiceNumber": payment.invoice_number,
-                "aiPaidAmount": payment.paid_amount,
-                # Initialize matching fields as None - will be set during invoice matching
-                "aiInvoiceId": None,
-                "overrideInvoiceId": None,
-                "matchConfidence": None,
-                "matchType": None,
-            }
-
             try:
-                await db.remittanceline.create(data=line_data)
+                # Use proper Prisma types for create operation
+                from prisma.types import RemittanceLineCreateInput
+
+                create_data: RemittanceLineCreateInput = {
+                    "remittanceId": remittance_id,
+                    "invoiceNumber": payment.invoice_number,
+                    "aiPaidAmount": payment.paid_amount,
+                    # Initialize matching fields as None - will be set during
+                    # invoice matching
+                    "aiInvoiceId": None,
+                    "overrideInvoiceId": None,
+                    "matchConfidence": None,
+                    "matchType": None,
+                }
+
+                await db.remittanceline.create(data=create_data)
                 print(
                     f"✅ Created line for invoice {payment.invoice_number} "
                     f"with amount {payment.paid_amount}",
@@ -587,6 +592,10 @@ async def process_remittance_background(
                     # Create ExtractedPayment for the matching service
                     from src.domains.remittances.types import ExtractedPayment
 
+                    # Skip lines without paid amount
+                    if line.aiPaidAmount is None:
+                        continue
+
                     payment = ExtractedPayment(
                         invoice_number=line.invoiceNumber, paid_amount=line.aiPaidAmount
                     )
@@ -602,32 +611,42 @@ async def process_remittance_background(
 
                     if match_results and len(match_results) > 0:
                         match = match_results[0]
+                        match_type_str = (
+                            match.match_type.value if match.match_type else "unknown"
+                        )
                         print(
                             f"  ✅ MATCH FOUND: {line.invoiceNumber} → "
-                            f"{match.match_type.value if match.match_type else 'unknown'} "
-                            f"match (confidence: {match.match_confidence})",
+                            f"{match_type_str} match (confidence: "
+                            f"{match.match_confidence})",
                             file=sys.stderr,
                             flush=True,
                         )
 
-                        # Update the remittance line with match data
+                        # Update the remittance line with match data using proper
+                        # Prisma relations
+                        from prisma.types import RemittanceLineUpdateInput
+
+                        # Build update data with proper types from Prisma schema
+                        update_data: RemittanceLineUpdateInput = {
+                            "matchConfidence": match.match_confidence,
+                            "matchType": (
+                                match.match_type.value if match.match_type else None
+                            ),
+                        }
+
+                        # Update aiInvoice relation using Prisma's connect operation
+                        if match.matched_invoice_id:
+                            update_data["aiInvoice"] = {
+                                "connect": {"id": str(match.matched_invoice_id)}
+                            }
+
                         await db.remittanceline.update(
                             where={"id": line.id},
-                            data={
-                                "aiInvoiceId": (
-                                    str(match.matched_invoice_id)
-                                    if match.matched_invoice_id
-                                    else None
-                                ),
-                                "matchConfidence": match.match_confidence,
-                                "matchType": (
-                                    match.match_type.value if match.match_type else None
-                                ),
-                            },
+                            data=update_data,
                         )
                         matched_count += 1
                         print(
-                            f"  💾 Updated line with match data",
+                            "  💾 Updated line with match data",
                             file=sys.stderr,
                             flush=True,
                         )
@@ -689,7 +708,8 @@ async def process_remittance_background(
                 flush=True,
             )
             logger.error(
-                f"Invoice matching failed for remittance {remittance_id}: {matching_error}"
+                f"Invoice matching failed for remittance {remittance_id}: "
+                f"{matching_error}"
             )
 
             # Set status to manual review if matching fails

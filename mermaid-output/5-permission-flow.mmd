@@ -1,0 +1,35 @@
+flowchart TD
+    A[API Request] --> B{Authenticated?}
+    B -->|No| C[401 Unauthorized]
+    B -->|Yes| D[Extract JWT Token]
+    
+    D --> E[Get User Profile]
+    E --> F[Get Organization Membership]
+    
+    F --> G{Member exists?}
+    G -->|No| H[403 Forbidden]
+    G -->|Yes| I[Get Member Role]
+    
+    I --> J[Map Role to Permissions]
+    
+    J --> K{Has required<br/>permission?}
+    K -->|No| L[403 Forbidden]
+    K -->|Yes| M[Execute Route Handler]
+    
+    subgraph "Role Permission Mapping"
+        OWNER[Owner Role<br/>- All permissions]
+        ADMIN[Admin Role<br/>- Most permissions<br/>- No billing]
+        USER[User Role<br/>- Basic view permissions]
+        AUDITOR[Auditor Role<br/>- Read-only access]
+    end
+    
+    subgraph "Available Permissions"
+        P1[VIEW_MEMBERS]
+        P2[MANAGE_MEMBERS]
+        P3[VIEW_BANK_ACCOUNTS]
+        P4[MANAGE_BANK_ACCOUNTS]
+        P5[VIEW_INVOICES]
+        P6[SYNC_INVOICES]
+        P7[CREATE_PAYMENTS]
+        P8[MANAGE_BILLING]
+    end

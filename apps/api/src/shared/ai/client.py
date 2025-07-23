@@ -247,7 +247,7 @@ class OpenAIClient:
                 )
             elif run.status == "requires_action":
                 print(
-                    f"🎯 Run requires action - extracting function call data",
+                    "🎯 Run requires action - extracting function call data",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -281,7 +281,8 @@ class OpenAIClient:
                                         function_call, "arguments", "{}"
                                     )
                                     print(
-                                        f"📄 Function arguments JSON: {arguments_json[:200]}...",
+                                        f"📄 Function arguments JSON: "
+                                        f"{arguments_json[:200]}...",
                                         file=sys.stderr,
                                         flush=True,
                                     )
@@ -291,12 +292,13 @@ class OpenAIClient:
                                     function_args = json.loads(arguments_json)
 
                                     print(
-                                        f"✅ Successfully extracted function arguments",
+                                        "✅ Successfully extracted function arguments",
                                         file=sys.stderr,
                                         flush=True,
                                     )
 
-                                    # Return the extracted data - this simulates a completed run
+                                    # Return extracted data - simulates
+                                    # completed run
                                     return {
                                         "status": "completed",
                                         "extracted_data": function_args,
@@ -312,7 +314,7 @@ class OpenAIClient:
 
                 # If no valid function call found, treat as error
                 print(
-                    f"❌ No valid function call found in requires_action",
+                    "❌ No valid function call found in requires_action",
                     file=sys.stderr,
                     flush=True,
                 )

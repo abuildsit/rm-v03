@@ -1,0 +1,104 @@
+classDiagram
+    class Organization {
+        +UUID id
+        +String name
+        +String subscriptionTier
+        +DateTime createdAt
+        +DateTime updatedAt
+        +getMembers()
+        +addMember(profile, role)
+        +removeMember(profileId)
+    }
+    
+    class Profile {
+        +UUID id
+        +String email
+        +String displayName
+        +UUID lastAccessedOrgId
+        +DateTime createdAt
+        +getMemberships()
+        +switchOrganization(orgId)
+    }
+    
+    class OrganizationMember {
+        +UUID id
+        +UUID profileId
+        +UUID organizationId
+        +OrganizationRole role
+        +MemberStatus status
+        +DateTime joinedAt
+        +hasPermission(permission)
+    }
+    
+    class Remittance {
+        +UUID id
+        +String filename
+        +RemittanceStatus status
+        +Date paymentDate
+        +Decimal totalAmount
+        +String reference
+        +Decimal confidenceScore
+        +process()
+        +approve()
+        +export()
+        +reconcile()
+    }
+    
+    class RemittanceLine {
+        +UUID id
+        +String invoiceNumber
+        +Decimal aiPaidAmount
+        +Decimal manualPaidAmount
+        +UUID aiInvoiceId
+        +UUID overrideInvoiceId
+        +matchInvoice()
+        +overrideMatch(invoiceId)
+    }
+    
+    class Invoice {
+        +UUID id
+        +String invoiceNumber
+        +String contactName
+        +Date invoiceDate
+        +InvoiceStatus status
+        +Decimal total
+        +Decimal amountDue
+        +String currencyCode
+        +syncFromXero()
+        +markAsPaid()
+    }
+    
+    class XeroConnection {
+        +UUID id
+        +String xeroTenantId
+        +String accessToken
+        +DateTime expiresAt
+        +XeroConnectionStatus status
+        +XeroSyncStatus syncStatus
+        +refreshToken()
+        +sync(objectType)
+        +disconnect()
+    }
+    
+    class PermissionService {
+        +checkPermission(member, permission)
+        +requirePermission(permission)
+        +getRolePermissions(role)
+    }
+    
+    class SyncOrchestrator {
+        +syncInvoices(dataService, orgId, options)
+        +syncAccounts(dataService, orgId)
+        +handleSyncError(error)
+    }
+    
+    Organization "1" --> "*" OrganizationMember
+    Profile "1" --> "*" OrganizationMember
+    Organization "1" --> "*" Remittance
+    Organization "1" --> "*" Invoice
+    Organization "1" --> "0..1" XeroConnection
+    Remittance "1" --> "*" RemittanceLine
+    RemittanceLine "*" --> "0..1" Invoice : AI matched
+    RemittanceLine "*" --> "0..1" Invoice : manual override
+    OrganizationMember ..> PermissionService : uses
+    XeroConnection ..> SyncOrchestrator : uses
