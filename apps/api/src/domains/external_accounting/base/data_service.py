@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Generic, List, TypeVar
+from typing import Generic, List, Optional, TypeVar
 
 from prisma import Prisma
 
@@ -28,7 +28,7 @@ class BaseIntegrationDataService(
 
     @abstractmethod
     async def get_invoices(
-        self, org_id: str, filters: BaseInvoiceFilters
+        self, org_id: str, filters: BaseInvoiceFilters, invoice_id: Optional[str] = None
     ) -> List[InvoiceType]:
         """
         Get invoices from provider.
@@ -36,6 +36,7 @@ class BaseIntegrationDataService(
         Args:
             org_id: Organization ID
             filters: Provider-specific filters (status, date_from, date_to, etc.)
+            invoice_id: Optional specific invoice ID to fetch
 
         Returns:
             List of typed invoice objects from the provider

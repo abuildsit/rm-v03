@@ -397,7 +397,7 @@ async def main():
             {
                 "id": str(uuid.uuid4()),
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
-                "invoiceId": "xero-inv-39794",
+                "invoiceId": "c5b238f4-1356-4cad-89d0-681b6d182ea7",
                 "invoiceNumber": "INV39794",  # Exact match
                 "contactName": "Acme Corp Ltd",
                 "contactId": str(uuid.uuid4()),
@@ -417,7 +417,7 @@ async def main():
             {
                 "id": str(uuid.uuid4()),
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
-                "invoiceId": "xero-inv-39840",
+                "invoiceId": "d6c349a5-2467-5dbe-90e1-792c7e293fb8",
                 "invoiceNumber": "inv39840",  # Case insensitive match
                 "contactName": "TechFlow Solutions",
                 "contactId": str(uuid.uuid4()),
@@ -437,7 +437,7 @@ async def main():
             {
                 "id": str(uuid.uuid4()),
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
-                "invoiceId": "xero-inv-39832",
+                "invoiceId": "e7d45bc6-3578-6ecf-a1f2-8a3d8f4b0c9e",
                 "invoiceNumber": "INV 39832",  # Space normalization (matches INV39832)
                 "contactName": "Digital Dynamics Inc",
                 "contactId": str(uuid.uuid4()),
@@ -457,7 +457,7 @@ async def main():
             {
                 "id": str(uuid.uuid4()),
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
-                "invoiceId": "xero-inv-39791",
+                "invoiceId": "f8e56cd7-4689-7fd0-b2a3-9b4e9c5d1f0a",
                 "invoiceNumber": "Inv--39791",  # Special character removal
                 "contactName": "BlueTech Innovations",
                 "contactId": str(uuid.uuid4()),
@@ -477,7 +477,7 @@ async def main():
             {
                 "id": str(uuid.uuid4()),
                 "organizationId": "42f929b1-8fdb-45b1-a7cf-34fae2314561",
-                "invoiceId": "xero-inv-39859",
+                "invoiceId": "a9f67de8-5790-8ae1-c3b4-0c5f0d6e2a1b",
                 "invoiceNumber": "Invoice-Sarah-39859",  # Complex pattern
                 "contactName": "Creative Solutions Ltd",
                 "contactId": str(uuid.uuid4()),

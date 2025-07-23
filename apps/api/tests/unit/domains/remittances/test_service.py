@@ -796,12 +796,12 @@ class TestApproveRemittance:
         # Mock invoices with specific Xero IDs
         invoice1 = Mock()
         invoice1.id = "custom-invoice-1"
-        invoice1.invoiceId = "xero-mapped-1"
+        invoice1.invoiceId = "c5b238f4-1356-4cad-89d0-681b6d182ea7"
         invoice1.invoiceNumber = "CUSTOM-INV-001"
 
         invoice2 = Mock()
         invoice2.id = "custom-override-2"
-        invoice2.invoiceId = "xero-mapped-2"
+        invoice2.invoiceId = "d6c349a5-2467-5dbe-90e1-792c7e293fb8"
         invoice2.invoiceNumber = "CUSTOM-INV-002"
 
         mapped_invoices = [invoice1, invoice2]
@@ -821,12 +821,12 @@ class TestApproveRemittance:
 
         # Check first payment (AI match)
         payment1 = payments[0]
-        assert payment1.invoice_id == "xero-mapped-1"
+        assert payment1.invoice_id == "c5b238f4-1356-4cad-89d0-681b6d182ea7"
         assert payment1.amount == Decimal("75.25")
         assert payment1.reference == "RM: Payment for Invoice CUSTOM-INV-001"
 
         # Check second payment (override match)
         payment2 = payments[1]
-        assert payment2.invoice_id == "xero-mapped-2"
+        assert payment2.invoice_id == "d6c349a5-2467-5dbe-90e1-792c7e293fb8"
         assert payment2.amount == Decimal("124.75")
         assert payment2.reference == "RM: Payment for Invoice CUSTOM-INV-002"

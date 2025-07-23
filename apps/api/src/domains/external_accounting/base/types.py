@@ -31,6 +31,7 @@ class BaseInvoiceFilters(BaseFilters):
         None, description="Start date as ISO datetime string"
     )
     date_to: Optional[str] = Field(None, description="End date as ISO datetime string")
+    invoice_id: Optional[str] = Field(None, description="Specific invoice ID to fetch")
 
 
 class BaseAccountFilters(BaseFilters):

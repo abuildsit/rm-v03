@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -10,8 +11,14 @@ from supabase import create_client
 
 from prisma import Json, Prisma
 from src.core.settings import settings
+from src.domains.external_accounting.base.data_service import BaseIntegrationDataService
 from src.domains.external_accounting.base.factory import IntegrationFactory
-from src.domains.external_accounting.base.types import BatchPaymentData, PaymentItem
+from src.domains.external_accounting.base.sync_orchestrator import SyncOrchestrator
+from src.domains.external_accounting.base.types import (
+    BaseInvoiceFilters,
+    BatchPaymentData,
+    PaymentItem,
+)
 
 # storage_service import removed - using existing supabase client
 from src.domains.remittances.ai_extraction import AIExtractionService
@@ -842,6 +849,18 @@ async def approve_remittance(
     )
 
     try:
+        # Pre-download file content before batch payment creation
+        file_content = None
+        filename = None
+        if remittance.filePath:
+            try:
+                file_content = supabase.storage.from_(BUCKET_NAME).download(
+                    remittance.filePath
+                )
+                filename = f"Remittance_{remittance.reference or remittance.id}.pdf"
+            except Exception as e:
+                logger.warning(f"Failed to download remittance file: {e}")
+
         # Get matched invoices for creating batch payment
         invoice_ids = []
         for line in matched_lines:
@@ -884,6 +903,32 @@ async def approve_remittance(
                     "outcome": AuditOutcome.success,
                     "reason": f"Batch payment created with ID: {result.batch_id}",
                 }
+            )
+
+            # Schedule async file upload if file was downloaded successfully
+            if file_content and filename and result.batch_id:
+                batch_id = result.batch_id  # Ensure type is str
+
+                async def upload_task() -> None:
+                    try:
+                        await data_service.upload_attachment(
+                            org_id=org_id,
+                            entity_id=batch_id,
+                            entity_type="BatchPayments",
+                            file_data=file_content,
+                            filename=filename,
+                        )
+                        logger.info(
+                            f"Uploaded remittance to batch payment {result.batch_id}"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to upload remittance attachment: {e}")
+
+                asyncio.create_task(upload_task())
+
+            # Schedule invoice sync task
+            asyncio.create_task(
+                _sync_batch_payment_invoices(db, org_id, matched_invoices, data_service)
             )
 
             logger.info(
@@ -1006,3 +1051,42 @@ def _build_batch_payment_data(
         ),
         payments=payments,
     )
+
+
+async def _sync_batch_payment_invoices(
+    db: Prisma,
+    org_id: str,
+    matched_invoices: list[Any],
+    data_service: BaseIntegrationDataService,
+) -> None:
+    """
+    Sync invoice statuses after batch payment creation (async).
+
+    Args:
+        db: Database instance
+        org_id: Organization ID
+        matched_invoices: List of matched invoice objects
+        data_service: External accounting data service
+    """
+    orchestrator = SyncOrchestrator(db)
+
+    for invoice in matched_invoices:
+        try:
+            # Fetch updated invoice from Xero using the invoice_id parameter
+            updated_invoices = await data_service.get_invoices(
+                org_id=org_id,
+                filters=BaseInvoiceFilters(
+                    modified_since=None,
+                    status=None,
+                    date_from=None,
+                    date_to=None,
+                    invoice_id=None,
+                ),
+                invoice_id=invoice.invoiceId,  # Xero invoice ID
+            )
+
+            if updated_invoices:
+                await orchestrator._upsert_invoices(org_id, updated_invoices)
+
+        except Exception as e:
+            logger.warning(f"Failed to sync invoice {invoice.invoiceId}: {e}")

@@ -34,7 +34,6 @@ from .types import (
     XeroBatchPaymentRequest,
     XeroInvoice,
     XeroInvoiceRef,
-    XeroInvoicesResponse,
     XeroPayment,
     XeroPaymentsResponse,
 )
@@ -53,7 +52,7 @@ class XeroDataService(
         self.xero_service = XeroService(db)
 
     async def get_invoices(
-        self, org_id: str, filters: BaseInvoiceFilters
+        self, org_id: str, filters: BaseInvoiceFilters, invoice_id: Optional[str] = None
     ) -> List[XeroInvoice]:
         """
         Get invoices from Xero API.
@@ -61,10 +60,27 @@ class XeroDataService(
         Args:
             org_id: Organization ID
             filters: Filters including status, date_from, date_to, modified_since
+            invoice_id: Optional specific invoice ID to fetch
 
         Returns:
             List of typed Xero invoice objects
         """
+        # If invoice_id is provided, fetch single invoice
+        if invoice_id:
+            response = await self._make_xero_request(
+                "GET",
+                f"{self.base_url}/Invoices/{invoice_id}",
+                org_id,
+            )
+            # Response is a dictionary from JSON, not a Pydantic model
+            response_dict = cast(dict, response)
+            invoice_dicts = response_dict["Invoices"]
+            return [
+                XeroInvoice.model_validate(invoice_dict)
+                for invoice_dict in invoice_dicts
+            ]
+
+        # Bulk invoice fetch logic (existing functionality)
         all_invoices = []
         page = 1
 
@@ -120,8 +136,13 @@ class XeroDataService(
                 headers=headers if headers else None,
             )
 
-            typed_response = cast(XeroInvoicesResponse, response)
-            invoices = typed_response.Invoices
+            # Response is a dictionary from JSON, not a Pydantic model
+            response_dict = cast(dict, response)
+            invoice_dicts = response_dict["Invoices"]
+            invoices = [
+                XeroInvoice.model_validate(invoice_dict)
+                for invoice_dict in invoice_dicts
+            ]
             all_invoices.extend(invoices)
 
             if len(invoices) < 100:

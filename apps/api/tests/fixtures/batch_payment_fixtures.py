@@ -21,12 +21,12 @@ def mock_batch_payment_data() -> BatchPaymentData:
         payment_reference="RM: Batch Payment REF-12345",
         payments=[
             PaymentItem(
-                invoice_id="test-invoice-1",
+                invoice_id="c5b238f4-1356-4cad-89d0-681b6d182ea7",
                 amount=Decimal("150.00"),
                 reference="RM: Payment for Invoice INV-001",
             ),
             PaymentItem(
-                invoice_id="test-invoice-2",
+                invoice_id="d6c349a5-2467-5dbe-90e1-792c7e293fb8",
                 amount=Decimal("250.50"),
                 reference="RM: Payment for Invoice INV-002",
             ),
@@ -76,6 +76,8 @@ def mock_remittance_ready_for_approval() -> Mock:
     remittance.organizationId = "test-org-123"
     remittance.organization_id = "test-org-123"
     remittance.filename = "approval_remittance.pdf"
+    remittance.filePath = "test-org-123/2024/01/approval-remittance.pdf"
+    remittance.file_path = "test-org-123/2024/01/approval-remittance.pdf"
     remittance.status = RemittanceStatus.Awaiting_Approval
     remittance.paymentDate = date(2024, 1, 15)
     remittance.payment_date = date(2024, 1, 15)
@@ -176,13 +178,13 @@ def mock_matched_invoices() -> List[Mock]:
 
     invoice1 = Mock(spec=Invoice)
     invoice1.id = "test-invoice-1"
-    invoice1.invoiceId = "xero-invoice-1"
+    invoice1.invoiceId = "c5b238f4-1356-4cad-89d0-681b6d182ea7"
     invoice1.invoiceNumber = "INV-001"
     invoice1.total = Decimal("150.00")
 
     invoice2 = Mock(spec=Invoice)
     invoice2.id = "test-invoice-2"
-    invoice2.invoiceId = "xero-invoice-2"
+    invoice2.invoiceId = "d6c349a5-2467-5dbe-90e1-792c7e293fb8"
     invoice2.invoiceNumber = "INV-002"
     invoice2.total = Decimal("250.50")
 

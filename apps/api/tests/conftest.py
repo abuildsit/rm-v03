@@ -57,6 +57,12 @@ def mock_prisma() -> Mock:
     mock_db.xeroconnection.update = AsyncMock()
     mock_db.xeroconnection.delete = AsyncMock()
 
+    # Remittance mocks
+    mock_db.remittance.find_unique = AsyncMock()
+    mock_db.remittance.update = AsyncMock()
+    mock_db.bankaccount.find_first = AsyncMock()
+    mock_db.auditlog.create = AsyncMock()
+
     return mock_db
 
 
