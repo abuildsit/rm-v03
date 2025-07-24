@@ -342,6 +342,14 @@ class BatchPaymentStatusResult(BaseModel):
     found: bool  # Whether the batch payment was found in Xero
 
 
+class BatchPaymentUpdateResult(BaseModel):
+    """Result of batch payment update operation."""
+
+    success: bool
+    batch_id: str
+    error_message: Optional[str] = None
+
+
 # Union types for API responses
 XeroApiResponse = Union[
     XeroInvoicesResponse,

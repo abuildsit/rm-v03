@@ -64,6 +64,13 @@ class RemittanceUpdateRequest(BaseModel):
     total_amount: Optional[Decimal] = None
     reference: Optional[str] = None
     is_deleted: Optional[bool] = Field(None, description="Soft delete the remittance")
+    unapprove: Optional[bool] = Field(
+        None,
+        description=(
+            "Unapprove exported remittance "
+            "(delete batch payment and revert to awaiting approval)"
+        ),
+    )
 
     model_config = ConfigDict(from_attributes=True)
 

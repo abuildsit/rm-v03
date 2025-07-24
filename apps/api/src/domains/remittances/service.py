@@ -284,6 +284,8 @@ async def update_remittance(
     update_data: RemittanceUpdateRequest,
 ) -> RemittanceDetailResponse:
     """Update a remittance record."""
+    from prisma.enums import RemittanceStatus
+
     # Get existing remittance
     existing = await db.remittance.find_unique(where={"id": remittance_id})
 
@@ -304,14 +306,50 @@ async def update_remittance(
     if is_approval_action:
         return await approve_remittance(db, org_id, user_id, remittance_id)
 
+    # Check if this is an unapproval action
+    is_unapproval_action = (
+        "unapprove" in update_data.model_dump(exclude_unset=True)
+        and update_data.unapprove is True
+    )
+
+    # If this is an unapproval action, use the dedicated unapprove_remittance function
+    if is_unapproval_action:
+        return await unapprove_remittance(db, org_id, user_id, remittance_id)
+
     # Prepare update data for regular updates
     update_dict = {}
     for field, value in update_data.model_dump(exclude_unset=True).items():
         if field == "is_deleted" and value:
-            # Handle soft deletion
-            # Note: Prisma schema doesn't show deletedAt field, so we might
-            # need to add it
-            # For now, we could use a status or add the field to schema
+            # Handle soft deletion with protection rules
+            # Check if remittance is in a state that prevents deletion
+            protected_statuses = [
+                RemittanceStatus.Awaiting_Approval,
+                RemittanceStatus.Exported_Unreconciled,
+                RemittanceStatus.Reconciled,
+            ]
+
+            if existing.status in protected_statuses:
+                status_msg = {
+                    RemittanceStatus.Awaiting_Approval: "awaiting approval",
+                    RemittanceStatus.Exported_Unreconciled: (
+                        "exported to Xero but unreconciled"
+                    ),
+                    RemittanceStatus.Reconciled: "reconciled in Xero",
+                }.get(existing.status, str(existing.status))
+
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"Cannot delete remittance that is {status_msg}. "
+                        "Please unapprove the remittance first if it has been exported."
+                    ),
+                )
+
+            # Set soft delete status
+            update_dict["status"] = RemittanceStatus.Soft_Deleted
+            continue
+        elif field == "unapprove":
+            # Skip unapprove field - it's handled separately
             continue
         else:
             # Convert snake_case to camelCase for Prisma
@@ -1227,3 +1265,199 @@ async def sync_all_pending_batch_payments(db: Prisma, org_id: str) -> None:
 
     except Exception as e:
         logger.error(f"Failed to sync batch payment statuses for org {org_id}: {e}")
+
+
+async def unapprove_remittance(
+    db: Prisma, org_id: str, user_id: str, remittance_id: str
+) -> RemittanceDetailResponse:
+    """
+    Unapprove an exported remittance by deleting the batch payment in Xero
+    and reverting the remittance status to Awaiting_Approval.
+
+    Args:
+        db: Database connection
+        org_id: Organization ID
+        user_id: User performing the unapproval
+        remittance_id: Remittance to unapprove
+
+    Returns:
+        Updated remittance details
+
+    Raises:
+        HTTPException: If unapproval conditions are not met
+    """
+    from prisma.enums import AuditAction, AuditOutcome, RemittanceStatus
+
+    # Get the remittance with its lines for invoice sync
+    remittance = await db.remittance.find_unique(
+        where={"id": remittance_id}, include={"lines": True}
+    )
+
+    if not remittance or remittance.organizationId != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Remittance not found"
+        )
+
+    # Validate that remittance is in correct status for unapproval
+    if remittance.status != RemittanceStatus.Exported_Unreconciled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Cannot unapprove remittance with status {remittance.status}. "
+                "Only exported unreconciled remittances can be unapproved."
+            ),
+        )
+
+    # Validate that batch payment exists
+    if not remittance.xeroBatchId:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No batch payment found for this remittance",
+        )
+
+    # Extract invoice IDs for post-deletion sync
+    # Get actual Invoice records from database (same pattern as approval process)
+    invoice_ids = []
+    if remittance.lines:
+        for line in remittance.lines:
+            if line.aiInvoiceId:  # Use AI-matched invoice ID (or override if present)
+                invoice_id = line.overrideInvoiceId or line.aiInvoiceId
+                invoice_ids.append(invoice_id)
+
+    matched_invoices = await db.invoice.find_many(where={"id": {"in": invoice_ids}})
+
+    # Create audit log for unapproval attempt
+    await db.auditlog.create(
+        data={
+            "remittanceId": remittance_id,
+            "organizationId": org_id,
+            "userId": user_id,
+            "action": AuditAction.updated,
+            "outcome": AuditOutcome.pending,
+            "reason": "Remittance unapproval started",
+        }
+    )
+
+    try:
+        # Get external accounting data service
+        from src.domains.external_accounting.base.factory import IntegrationFactory
+
+        factory = IntegrationFactory(db)
+        data_service = await factory.get_data_service(org_id)
+
+        if not data_service:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No external accounting integration configured",
+            )
+
+        # Check if it's a Xero data service
+        from src.domains.external_accounting.xero.data_service import XeroDataService
+
+        if not isinstance(data_service, XeroDataService):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unapproval is only supported for Xero integrations",
+            )
+
+        # First, check current batch payment status in Xero
+        status_result = await data_service.get_batch_payment_status(
+            org_id, remittance.xeroBatchId
+        )
+
+        if not status_result.found:
+            # Batch payment not found in Xero - just revert status locally
+            logger.warning(f"Batch payment {remittance.xeroBatchId} not found in Xero")
+        elif status_result.is_reconciled:
+            # Payment is reconciled - cannot unapprove
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "This payment has already been reconciled in Xero. "
+                    "Please unreconcile the payment in Xero before trying again."
+                ),
+            )
+        else:
+            # Payment exists and is unreconciled - attempt to delete it
+            delete_result = await data_service.update_batch_payment(
+                org_id=org_id,
+                batch_payment_id=remittance.xeroBatchId,
+                updates={"Status": "DELETED"},
+            )
+
+            if not delete_result.success:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"Failed to delete batch payment in Xero: "
+                        f"{delete_result.error_message}"
+                    ),
+                )
+
+            # Schedule invoice sync task to update statuses after deletion
+            if matched_invoices:
+                import asyncio
+
+                asyncio.create_task(
+                    _sync_batch_payment_invoices(
+                        db, org_id, matched_invoices, data_service
+                    )
+                )
+
+        # If we get here, unapproval was successful or batch payment didn't exist
+        # Revert remittance status to Awaiting_Approval
+        await db.remittance.update(
+            where={"id": remittance_id},
+            data={
+                "status": RemittanceStatus.Awaiting_Approval,
+                "xeroBatchId": None,
+                "batchPaymentStatus": None,
+                "isReconciled": None,
+                "lastStatusCheck": None,
+            },
+        )
+
+        # Create success audit log
+        await db.auditlog.create(
+            data={
+                "remittanceId": remittance_id,
+                "organizationId": org_id,
+                "userId": user_id,
+                "action": AuditAction.updated,
+                "outcome": AuditOutcome.success,
+                "reason": (
+                    "Remittance unapproved successfully - batch payment deleted "
+                    "and status reverted to awaiting approval"
+                ),
+            }
+        )
+
+        logger.info(f"Successfully unapproved remittance {remittance_id}")
+
+        # Return updated remittance details
+        return await get_remittance_by_id(db, org_id, remittance_id)
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Log and create failure audit entry
+        error_msg = f"Failed to unapprove remittance: {str(e)}"
+        logger.error(
+            f"Unapproval failed for remittance {remittance_id}: {e}", exc_info=True
+        )
+
+        await db.auditlog.create(
+            data={
+                "remittanceId": remittance_id,
+                "organizationId": org_id,
+                "userId": user_id,
+                "action": AuditAction.updated,
+                "outcome": AuditOutcome.error,
+                "reason": f"Remittance unapproval failed: {error_msg}",
+            }
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_msg
+        )

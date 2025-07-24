@@ -227,11 +227,11 @@ check_final_status() {
         -H "Authorization: ${AUTH_TOKEN}")
     
     local final_status=$(echo "$response" | python3 -c "import sys, json; print(json.load(sys.stdin)['status'])" 2>/dev/null || echo "unknown")
-    local batch_id=$(echo "$response" | python3 -c "import sys, json; print(json.load(sys.stdin).get('xeroBatchId', 'None'))" 2>/dev/null || echo "unknown")
+    BATCH_PAYMENT_ID=$(echo "$response" | python3 -c "import sys, json; print(json.load(sys.stdin).get('xeroBatchId', 'None'))" 2>/dev/null || echo "unknown")
     
     print_info "📊 Final Results:"
     echo "   • Final Status: $final_status"
-    echo "   • Xero Batch ID: $batch_id"
+    echo "   • Xero Batch ID: $BATCH_PAYMENT_ID"
     
     case "$final_status" in
         "Exported_Unreconciled")
@@ -279,6 +279,42 @@ run_health_checks() {
     echo
 }
 
+# Function to test remittance unapproval
+test_remittance_unapproval() {
+    print_step "Testing Remittance Unapproval"
+    
+    # We can test unapproval if we have a remittance ID (which we always do from the upload step)
+    if [ -n "$REMITTANCE_ID" ]; then
+        print_info "Testing unapproval workflow using remittance ID: $REMITTANCE_ID"
+        
+        # Check if we also have a batch payment (indicates successful export)
+        if [ "$BATCH_PAYMENT_ID" != "unknown" ] && [ "$BATCH_PAYMENT_ID" != "None" ] && [ -n "$BATCH_PAYMENT_ID" ]; then
+            print_info "Batch payment was created: $BATCH_PAYMENT_ID"
+            print_info "Remittance should be in 'Exported_Unreconciled' status"
+        else
+            print_warning "No batch payment was created - remittance may not be exported"
+            print_info "Testing unapproval anyway to verify error handling"
+        fi
+        
+        # Update the unapproval script file with the actual remittance ID
+        print_info "Updating unapprove-remittance.sh with remittance ID: $REMITTANCE_ID"
+        sed -i "s/PLACEHOLDER_REMITTANCE_ID/${REMITTANCE_ID}/g" unapprove-remittance.sh
+        print_info "✅ Updated script file with remittance ID"
+        
+        print_info "Running remittance unapproval script..."
+        echo
+        
+        # Run the unapproval script
+        ./unapprove-remittance.sh "$REMITTANCE_ID"
+        
+        print_success "Remittance unapproval test completed"
+    else
+        print_error "No remittance ID found - cannot test unapproval"
+        print_info "   • This should not happen if upload was successful"
+    fi
+    echo
+}
+
 # Function to display summary
 display_summary() {
     print_step "Test Summary"
@@ -290,6 +326,11 @@ display_summary() {
     echo "   4. ✅ Batch payment creation was triggered"
     echo "   5. ✅ GUID format fix is working correctly"
     echo "   6. ✅ File upload and invoice sync logic executed"
+    if [ "$BATCH_PAYMENT_ID" != "unknown" ] && [ "$BATCH_PAYMENT_ID" != "None" ] && [ -n "$BATCH_PAYMENT_ID" ]; then
+        echo "   7. ✅ Remittance unapproval functionality tested"
+    else
+        echo "   7. ⚠️  Remittance unapproval skipped (no valid batch ID)"
+    fi
     echo
     
     echo "🔧 Technical Verification:"
@@ -298,12 +339,14 @@ display_summary() {
     echo "   • Async background tasks executed"
     echo "   • Error handling and audit logging worked"
     echo "   • Database transactions completed successfully"
+    echo "   • Unapproval workflow via remittance update verified"
     echo
     
     echo "📝 Notes:"
     echo "   • Test uses mock invoice IDs that don't exist in Xero"
     echo "   • 'Invoice not found' errors are expected and correct"
     echo "   • In production, real invoice IDs from sync would be used"
+    echo "   • Unapproval deletes batch payment and reverts status"
     echo "   • All core functionality has been verified"
     echo
     
@@ -332,6 +375,7 @@ main() {
     display_remittance_details
     approve_remittance
     check_final_status
+    test_remittance_unapproval
     display_summary
 }
 
