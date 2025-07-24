@@ -1,6 +1,7 @@
 """Xero API type definitions for type safety."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
@@ -306,6 +307,41 @@ class XeroBatchPaymentRequest(BaseModel):
         return v
 
 
+# Bank Transaction types
+class XeroBankTransaction(BaseModel):
+    """Xero bank transaction details."""
+
+    BankTransactionID: str = Field(..., description="Xero bank transaction identifier")
+    BatchPayment: Optional[dict] = Field(
+        None, description="Batch payment reference if applicable"
+    )
+    Type: str = Field(..., description="Transaction type (SPEND, RECEIVE, etc.)")
+    Status: str = Field(..., description="Transaction status (AUTHORISED, DELETED)")
+    IsReconciled: bool = Field(..., description="Whether transaction is reconciled")
+    Date: str = Field(..., description="Transaction date")
+    Reference: Optional[str] = Field(None, description="Transaction reference")
+    Total: Decimal = Field(..., description="Total transaction amount")
+    UpdatedDateUTC: str = Field(..., description="Last modified date UTC")
+
+
+class XeroBankTransactionsResponse(BaseModel):
+    """Response wrapper for bank transactions endpoint."""
+
+    BankTransactions: List[XeroBankTransaction] = Field(
+        ..., description="List of bank transactions from Xero API"
+    )
+
+
+class BatchPaymentStatusResult(BaseModel):
+    """Result of batch payment status check."""
+
+    batch_id: str
+    status: str  # AUTHORISED, DELETED
+    is_reconciled: bool
+    last_updated: str
+    found: bool  # Whether the batch payment was found in Xero
+
+
 # Union types for API responses
 XeroApiResponse = Union[
     XeroInvoicesResponse,
@@ -313,4 +349,5 @@ XeroApiResponse = Union[
     XeroPaymentsResponse,
     XeroAttachmentsResponse,
     XeroBatchPaymentResponse,
+    XeroBankTransactionsResponse,
 ]

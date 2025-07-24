@@ -209,7 +209,7 @@ class TestRemittanceApprovalWithUpload:
                         mock_data_service.upload_attachment.assert_called_once_with(
                             org_id=org_id,
                             entity_id="xero-batch-123",
-                            entity_type="BatchPayments",
+                            entity_type="BankTransactions",
                             file_data=mock_file_content,
                             filename="Remittance_REF-12345.pdf",
                         )

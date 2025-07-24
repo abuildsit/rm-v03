@@ -914,7 +914,7 @@ async def approve_remittance(
                         await data_service.upload_attachment(
                             org_id=org_id,
                             entity_id=batch_id,
-                            entity_type="BatchPayments",
+                            entity_type="BankTransactions",
                             file_data=file_content,
                             filename=filename,
                         )
@@ -1090,3 +1090,140 @@ async def _sync_batch_payment_invoices(
 
         except Exception as e:
             logger.warning(f"Failed to sync invoice {invoice.invoiceId}: {e}")
+
+
+async def sync_batch_payment_status(
+    db: Prisma, org_id: str, remittance_id: str
+) -> None:
+    """
+    Sync batch payment status from Xero for a remittance.
+
+    This method checks the current status of the batch payment in Xero
+    and updates the remittance record with the latest status and
+    reconciliation info.
+
+    Args:
+        org_id: Organization ID
+        remittance_id: Remittance ID to sync status for
+    """
+    try:
+        # Get the remittance record
+        remittance = await db.remittance.find_unique(where={"id": remittance_id})
+
+        if not remittance or not remittance.xeroBatchId:
+            logger.warning(f"No batch payment ID found for remittance {remittance_id}")
+            return
+
+        # Get external accounting data service
+        from src.domains.external_accounting.base.factory import (
+            IntegrationFactory,
+        )
+
+        factory = IntegrationFactory(db)
+        data_service = await factory.get_data_service(org_id)
+
+        if not data_service:
+            logger.warning(f"No external accounting integration found for org {org_id}")
+            return
+
+        # Check if it's a Xero data service (type checking)
+        if not hasattr(data_service, "get_batch_payment_status"):
+            logger.warning(
+                "Data service does not support batch payment status checking"
+            )
+            return
+
+        # Get batch payment status from Xero (cast to specific type)
+        from src.domains.external_accounting.xero.data_service import (
+            XeroDataService,
+        )
+
+        xero_service = cast(XeroDataService, data_service)
+        status_result = await xero_service.get_batch_payment_status(
+            org_id, remittance.xeroBatchId
+        )
+
+        if not status_result.found:
+            logger.warning(f"Batch payment {remittance.xeroBatchId} not found in Xero")
+            return
+
+        # Map Xero status to our enum
+        from prisma.enums import BatchPaymentStatus
+
+        batch_status = None
+        if status_result.status == "AUTHORISED":
+            batch_status = BatchPaymentStatus.AUTHORISED
+        elif status_result.status == "DELETED":
+            batch_status = BatchPaymentStatus.DELETED
+
+        # Update remittance with current status
+        from datetime import datetime, timezone
+
+        await db.remittance.update(
+            where={"id": remittance_id},
+            data={
+                "batchPaymentStatus": batch_status,
+                "isReconciled": status_result.is_reconciled,
+                "lastStatusCheck": datetime.now(timezone.utc),
+            },
+        )
+
+        logger.info(
+            f"Updated batch payment status for remittance {remittance_id}: "
+            f"status={status_result.status}, "
+            f"reconciled={status_result.is_reconciled}"
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Failed to sync batch payment status for remittance "
+            f"{remittance_id}: {e}"
+        )
+
+
+async def sync_all_pending_batch_payments(db: Prisma, org_id: str) -> None:
+    """
+    Sync status for all remittances with batch payments that need status updates.
+
+    This method finds all remittances that have been exported but may
+    need status updates, and syncs their batch payment status from Xero.
+
+    Args:
+        org_id: Organization ID
+    """
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        from prisma.enums import RemittanceStatus
+
+        # Find remittances that might need status updates:
+        # 1. Have xeroBatchId (batch payment created)
+        # 2. Status is Exported_Unreconciled or Exporting
+        # 3. Haven't been checked recently (more than 1 hour ago)
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+
+        # Find remittances that might need status updates
+        remittances = await db.remittance.find_many(
+            where={
+                "organizationId": org_id,
+                "NOT": [{"xeroBatchId": None}],  # Has batch ID
+            }
+        )
+
+        # Filter in Python for simplicity (avoiding complex Prisma typing)
+        filtered_remittances = [
+            r
+            for r in remittances
+            if r.status
+            in [RemittanceStatus.Exported_Unreconciled, RemittanceStatus.Exporting]
+            and (r.lastStatusCheck is None or r.lastStatusCheck < one_hour_ago)
+        ]
+
+        logger.info(f"Found {len(filtered_remittances)} remittances to sync status for")
+
+        # Sync status for each remittance
+        for remittance in filtered_remittances:
+            await sync_batch_payment_status(db, org_id, remittance.id)
+
+    except Exception as e:
+        logger.error(f"Failed to sync batch payment statuses for org {org_id}: {e}")

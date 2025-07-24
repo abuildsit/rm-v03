@@ -69,6 +69,11 @@ enum RemittanceStatus {
   Soft_Deleted
 }
 
+enum BatchPaymentStatus {
+  AUTHORISED  // Batch payment has been created and authorised in Xero
+  DELETED     // Batch payment has been deleted in Xero
+}
+
 enum XeroConnectionStatus {
   connected
   expired
@@ -285,6 +290,9 @@ model Remittance {
   extractedRawJson Json?
   openaiThreadId   String?
   xeroBatchId      String?
+  batchPaymentStatus BatchPaymentStatus? // Xero batch payment status
+  isReconciled     Boolean?         // Whether batch payment is reconciled in Xero
+  lastStatusCheck  DateTime?        @db.Timestamptz(6) // Last time we checked status from Xero
   createdAt        DateTime?        @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime?        @default(now()) @db.Timestamptz(6)
   auditLogs        AuditLog[]

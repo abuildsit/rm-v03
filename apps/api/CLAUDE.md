@@ -6,6 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RemitMatch API - A FastAPI application for remittance matching and invoice processing with Supabase authentication and PostgreSQL database via Prisma ORM.
 
+## Claude Behaviours:
+- When asking design questions between options - give your opnion on the better approach, as well as the inherent trade-offs.
+
 ## Development Commands
 
 ### Core Development Tasks
